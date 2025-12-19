@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
@@ -56,12 +56,14 @@ class Task:
     notes: str = ""
 
     last_done: Optional[datetime] = None
+    last_done_by: Optional[str] = None
     due: Optional[datetime] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["started_at"] = _dt_to_iso(self.started_at)
         d["last_done"] = _dt_to_iso(self.last_done)
+        d["last_done_by"] = self.last_done_by
         d["due"] = _dt_to_iso(self.due)
         return d
 
@@ -84,6 +86,7 @@ class Task:
             notes=str(d.get("notes", "") or ""),
 
             last_done=_dt_from_iso(d.get("last_done")),
+            last_done_by=d.get("last_done_by"),
             due=_dt_from_iso(d.get("due")),
         )
 
