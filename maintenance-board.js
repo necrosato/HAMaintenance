@@ -145,15 +145,11 @@ class MaintenanceBoardCard extends HTMLElement {
               </div>
             </div>
 
-            <div class="grid">
+            <div class="grid1">
               <div>
                 <label>Last done (date)</label>
                 <input id="f_last_done" type="date" />
-                <div class="hint">If set and Due is blank, Due will auto-calc from Frequency.</div>
-              </div>
-              <div>
-                <label>Due date (date)</label>
-                <input id="f_due" type="date" />
+                <div class="hint">Due auto-calculates from Last done + Frequency.</div>
               </div>
             </div>
 
@@ -380,9 +376,7 @@ class MaintenanceBoardCard extends HTMLElement {
 
     // Dates (we store ISO; date input wants YYYY-MM-DD)
     const lastDone = t?.last_done ? String(t.last_done).slice(0, 10) : "";
-    const due = t?.due ? String(t.due).slice(0, 10) : "";
     this._root.getElementById("f_last_done").value = lastDone;
-    this._root.getElementById("f_due").value = due;
 
     this._setModalError("");
     this._root.getElementById("idHint").textContent = isEdit ? `ID: ${t.id}` : "ID will be generated automatically.";
@@ -442,7 +436,7 @@ class MaintenanceBoardCard extends HTMLElement {
   }
 
   async _saveTask() {
-    const { title, zone, freq_days, est_min, notes, last_done, due } = this._readModalForm();
+    const { title, zone, freq_days, est_min, notes, last_done } = this._readModalForm();
     const isEdit = !!this._editing;
     const user = this._getUser();
 
