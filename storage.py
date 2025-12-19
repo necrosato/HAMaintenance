@@ -135,13 +135,21 @@ class MaintenanceDB:
 
         tasks: Dict[str, Task] = {}
         if isinstance(raw_tasks, dict):
-          for tid, td in raw_tasks.items():
-              if isinstance(td, dict):
-                  td = dict(td)
-                  td.setdefault("id", tid)
-                  t = Task.from_dict(td)
-                  if t.id:
-                      tasks[t.id] = t
+            for tid, td in raw_tasks.items():
+                if isinstance(td, dict):
+                    td = dict(td)
+                    td.setdefault("id", tid)
+                    t = Task.from_dict(td)
+                    # Preserve runtime state across HA restarts so running timers keep accruing
+                    # wall time. If the start timestamp is missing, fall back to a paused state
+                    # to avoid runaway counters with an unknown origin.
+                    if t.status == "running":
+                        if t.started_at:
+                            t.started_at = t.started_at.astimezone(timezone.utc)
+                        else:
+                            t.status = "paused"
+                    if t.id:
+                        tasks[t.id] = t
 
         self.tasks = tasks
 
