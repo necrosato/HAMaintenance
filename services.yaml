@@ -1,0 +1,72 @@
+add_task:
+  name: Add task
+  fields:
+    task_id:
+      required: true
+      example: "house_roof_demoss"
+    title:
+      required: true
+      example: "Roof – De-moss"
+    zone:
+      required: true
+      example: "House"
+    freq_days:
+      required: false
+      example: 30
+    due:
+      required: false
+      example: "2025-12-20T00:00:00+00:00"
+    notes:
+      required: false
+      example: "Do north side first."
+
+update_task:
+  name: Update task
+  fields:
+    task_id:
+      required: true
+    title:
+      required: false
+    zone:
+      required: false
+    freq_days:
+      required: false
+    due:
+      required: false
+    notes:
+      required: false
+
+delete_task:
+  name: Delete task
+  fields:
+    task_id:
+      required: true
+
+start_task:
+  name: Start task
+  fields:
+    task_id:
+      required: true
+    user:
+      required: true
+      example: "Naookie"
+
+pause_task:
+  name: Pause task
+  fields:
+    task_id:
+      required: true
+    user:
+      required: true
+
+complete_task:
+  name: Complete task
+  fields:
+    task_id:
+      required: true
+    user:
+      required: true
+    manual_minutes:
+      required: false
+      example: 42
+

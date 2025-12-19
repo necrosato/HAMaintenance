@@ -1,0 +1,15 @@
+{
+  "title": "Maintenance Tasks",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Maintenance Tasks",
+        "description": "Create the maintenance task store and entity.",
+        "data": {
+          "name": "Name"
+        }
+      }
+    }
+  }
+}
+
