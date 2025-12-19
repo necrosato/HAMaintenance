@@ -406,13 +406,11 @@ class MaintenanceBoardCard extends HTMLElement {
     const est_min = estStr === "" ? 0 : Number(estStr);
 
     const last_done_date = this._root.getElementById("f_last_done").value.trim();
-    const due_date = this._root.getElementById("f_due").value.trim();
 
     // Send ISO datetime at midnight UTC, which HA cv.datetime accepts
     const last_done = last_done_date ? `${last_done_date}T00:00:00Z` : null;
-    const due = due_date ? `${due_date}T00:00:00Z` : null;
 
-    return { title, zone, freq_days, est_min, notes, last_done, due };
+    return { title, zone, freq_days, est_min, notes, last_done };
   }
 
   async _saveTask() {
@@ -432,7 +430,6 @@ class MaintenanceBoardCard extends HTMLElement {
       notes,
     };
     if (last_done) payload.last_done = last_done;
-    if (due) payload.due = due;
 
     if (!isEdit) {
       const task_id = `${this._slugify(zone)}_${this._slugify(title)}` || `task_${Date.now()}`;

@@ -107,11 +107,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         est_min = int(data.get("est_min", 0))
 
         last_done = _ensure_aware(data.get("last_done"))
-        due = _ensure_aware(data.get("due"))
-
-        # Rule: if last_done is provided and due is not, compute due from last_done+freq_days
-        if due is None and last_done is not None:
-            due = _compute_due(last_done, freq_days)
+        due = _compute_due(last_done, freq_days)
 
         t = Task(
             id=task_id,
@@ -162,13 +158,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         if due_provided:
             t.due = _ensure_aware(data.get("due"))
 
-        # Rule: if last_done provided and due NOT provided, compute due = last_done + freq_days
-        if last_done_provided and not due_provided:
-            t.due = _compute_due(t.last_done, int(t.freq_days or 0))
-
-        # Also: if freq_days changed and due not explicitly provided, keep due consistent with last_done
-        if ("freq_days" in data) and (not due_provided) and (not last_done_provided) and t.last_done:
-            t.due = _compute_due(t.last_done, int(t.freq_days or 0))
+        t.due = _compute_due(t.last_done, int(t.freq_days or 0))
 
         db.upsert(t)
         await db.async_save()
