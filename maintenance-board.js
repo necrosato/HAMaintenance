@@ -167,7 +167,6 @@ class MaintenanceBoardCard extends HTMLElement {
               <button class="ok" id="saveBtn">Save</button>
             </div>
 
-            <div class="hint" id="idHint"></div>
           </div>
         </div>
       `;
@@ -269,13 +268,15 @@ class MaintenanceBoardCard extends HTMLElement {
     return total;
   }
 
-  async _call(domain, service, data) {
+  async _call(domain, service, data, opts = {}) {
     try {
       await this._hass.callService(domain, service, data);
-      return true;
+      return { ok: true };
     } catch (e) {
-      this._notify(e?.message || String(e));
-      return false;
+      const msg = e?.message || String(e);
+      if (opts?.onError) opts.onError(msg);
+      else this._notify(msg);
+      return { ok: false, message: msg };
     }
   }
 
@@ -286,16 +287,6 @@ class MaintenanceBoardCard extends HTMLElement {
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
-  }
-
-  _slugify(s) {
-    return String(s || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[\u2013\u2014]/g, "-")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 80);
   }
 
   _getTasksState() {
@@ -379,8 +370,6 @@ class MaintenanceBoardCard extends HTMLElement {
     this._root.getElementById("f_last_done").value = lastDone;
 
     this._setModalError("");
-    this._root.getElementById("idHint").textContent = isEdit ? `ID: ${t.id}` : "ID will be generated automatically.";
-
     setTimeout(() => this._root.getElementById("f_title").focus(), 10);
   }
 
@@ -455,11 +444,9 @@ class MaintenanceBoardCard extends HTMLElement {
     if (last_done) payload.last_done = last_done;
 
     if (!isEdit) {
-      const task_id = `${this._slugify(zone)}_${this._slugify(title)}` || `task_${Date.now()}`;
-      payload.task_id = task_id;
-
-      const ok = await this._call("maintenance", "add_task", payload);
-      if (!ok) return;
+      const res = await this._call("maintenance", "add_task", payload, { onError: (msg) => this._setModalError(msg) });
+      if (!res?.ok) return;
+      this._setModalError("");
       this._notify("Task added.");
       this._closeModal();
       return;
@@ -467,8 +454,9 @@ class MaintenanceBoardCard extends HTMLElement {
 
     payload.task_id = this._editing.id;
     payload.user = user;
-    const ok = await this._call("maintenance", "update_task", payload);
-    if (!ok) return;
+    const res = await this._call("maintenance", "update_task", payload, { onError: (msg) => this._setModalError(msg) });
+    if (!res?.ok) return;
+    this._setModalError("");
     this._notify("Task updated.");
     this._closeModal();
   }
@@ -482,7 +470,7 @@ class MaintenanceBoardCard extends HTMLElement {
     }
     const yes = confirm(`Delete task?\n\n[${task.zone}] ${task.title}\n\nThis cannot be undone.`);
     if (!yes) return;
-    const ok = await this._call("maintenance", "delete_task", { task_id: task.id, user });
+    const { ok } = await this._call("maintenance", "delete_task", { task_id: task.id, user });
     if (ok) this._notify("Task deleted.");
   }
 
@@ -497,7 +485,7 @@ class MaintenanceBoardCard extends HTMLElement {
     const yes = confirm(`Reset task history?\n\n[${task.zone}] ${task.title}\n\nThis clears averages and timers but keeps last done + frequency.`);
     if (!yes) return;
 
-    const ok = await this._call("maintenance", "reset_task", { task_id: task.id, user });
+    const { ok } = await this._call("maintenance", "reset_task", { task_id: task.id, user });
     if (ok) this._notify("Task reset.");
   }
 
@@ -603,7 +591,6 @@ class MaintenanceBoardCard extends HTMLElement {
 
             <div class="right">
               <div class="duration" data-duration="${this._escape(t.id)}">${this._escape(durTxt)}</div>
-              <div class="small">${this._escape(t.id)}</div>
               ${startedAt ? `<div class="small">Started: ${this._escape(startedAt)}</div>` : ""}
               <div class="icons">
                 <button class="smallBtn" data-edit="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>✏️</button>
