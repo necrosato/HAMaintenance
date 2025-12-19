@@ -220,6 +220,13 @@ class MaintenanceBoardCard extends HTMLElement {
   }
 
   _getUser() {
+    const cfg = this._config || {};
+    if (cfg.user_entity) {
+      const st = this._hass.states[cfg.user_entity];
+      if (st && st.state && st.state !== "unknown" && st.state !== "unavailable") return st.state;
+    }
+    if (cfg.user) return cfg.user;
+
     const hassUser = this._hass?.user;
     if (hassUser) return hassUser.name || hassUser.id || "unknown";
 
