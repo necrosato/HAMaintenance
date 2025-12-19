@@ -36,10 +36,7 @@ ADD_TASK_SCHEMA = vol.Schema(
         vol.Optional("freq_days", default=0): vol.Coerce(int),
         vol.Optional("est_min", default=0): vol.Coerce(int),
         vol.Optional("notes", default=""): cv.string,
-
-        # ✅ new fields
         vol.Optional("last_done"): cv.datetime,
-        vol.Optional("due"): cv.datetime,
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -52,10 +49,7 @@ UPDATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("freq_days"): vol.Coerce(int),
         vol.Optional("est_min"): vol.Coerce(int),
         vol.Optional("notes"): cv.string,
-
-        # ✅ new fields
         vol.Optional("last_done"): cv.datetime,
-        vol.Optional("due"): cv.datetime,
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -150,13 +144,8 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         if "notes" in data:
             t.notes = data["notes"] or ""
 
-        last_done_provided = "last_done" in data
-        due_provided = "due" in data
-
-        if last_done_provided:
+        if "last_done" in data:
             t.last_done = _ensure_aware(data.get("last_done"))
-        if due_provided:
-            t.due = _ensure_aware(data.get("due"))
 
         t.due = _compute_due(t.last_done, int(t.freq_days or 0))
 
