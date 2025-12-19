@@ -206,6 +206,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
 
         if "last_done" in data:
             t.last_done = _ensure_aware(data.get("last_done"))
+            t.last_done_by = user
 
         t.due = _compute_due(t.last_done, int(t.freq_days or 0))
 
@@ -325,6 +326,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
 
         # Completion sets last_done and reschedules due from completion time (your requirement)
         t.last_done = now
+        t.last_done_by = user
         if int(t.freq_days or 0) > 0:
             t.due = now + timedelta(days=int(t.freq_days))
         else:

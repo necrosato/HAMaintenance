@@ -562,29 +562,38 @@ class MaintenanceBoardCard extends HTMLElement {
       const totalSec = this._liveTotalSec(t);
       const durTxt = this._fmtDuration(totalSec);
       const lastDone = this._fmtDate(t.last_done) || "never";
+      const lastDoneBy = (t.last_done_by || "").trim();
+      const lastDoneLabel = lastDone === "never"
+        ? "Last done: never"
+        : (lastDoneBy ? `Last done: ${lastDone} by ${lastDoneBy}` : `Last done: ${lastDone}`);
       const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
 
       const borderClass = (daysLeft !== null && daysLeft !== undefined && daysLeft < 0) ? "danger" : "ok";
       const lockTxt = locked ? `locked by ${locked}` : "unlocked";
       const est = t.est_min ? `${t.est_min}m est` : "";
-      const avg = t.avg_min ? `${t.avg_min}m avg` : "";
+      const hasAvg = t.avg_min !== undefined && t.avg_min !== null;
+      const avg = hasAvg ? `${t.avg_min}m avg` : "";
       const freq = t.freq_days ? `every ${t.freq_days}d` : "";
 
       const note = (t.notes || "").trim();
+
+      const title = this._escape(t.title);
+      const zonePill = t.zone ? `<span class="pill">${this._escape(t.zone)}</span>` : "";
 
       return `
         <div class="row">
           <div class="head">
             <div>
-              <div class="title">${this._escape(`[${t.zone}] ${t.title}`)}</div>
+              <div class="title">${title}</div>
               <div class="meta">
+                ${zonePill}
                 <span class="pill ${borderClass}">${this._escape(dueTxt)}</span>
                 ${freq ? `<span class="pill">${this._escape(freq)}</span>` : ""}
                 ${est ? `<span class="pill">${this._escape(est)}</span>` : ""}
                 ${avg ? `<span class="pill">${this._escape(avg)}</span>` : ""}
                 <span class="pill">${this._escape(status)}</span>
                 <span class="pill">${this._escape(lockTxt)}</span>
-                <span class="pill">Last done: ${this._escape(lastDone)}</span>
+                <span class="pill">${this._escape(lastDoneLabel)}</span>
               </div>
               ${note ? `<div class="note">${this._escape(note)}</div>` : ""}
             </div>

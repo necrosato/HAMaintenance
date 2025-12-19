@@ -90,6 +90,7 @@ class MaintenanceTasksSensor(SensorEntity):
 
                     "due": _iso(t.due),
                     "last_done": _iso(t.last_done),
+                    "last_done_by": t.last_done_by,
                     "days_left": _days_left(t.due),
 
                     "status": t.status,
@@ -165,6 +166,7 @@ class MaintenanceSelectedTaskSensor(SensorEntity):
             "freq_days": t.freq_days,
             "due": _iso(t.due),
             "last_done": _iso(t.last_done),
+            "last_done_by": t.last_done_by,
             "days_left": _days_left(t.due),
             "status": t.status,
             "locked_by": t.locked_by,
