@@ -486,6 +486,21 @@ class MaintenanceBoardCard extends HTMLElement {
     if (ok) this._notify("Task deleted.");
   }
 
+  async _resetTask(task) {
+    const user = this._getUser();
+    const locked = task.locked_by;
+    if (locked && locked !== user) {
+      this._notify(`Task is locked by ${locked}`);
+      return;
+    }
+
+    const yes = confirm(`Reset task history?\n\n[${task.zone}] ${task.title}\n\nThis clears averages and timers but keeps last done + frequency.`);
+    if (!yes) return;
+
+    const ok = await this._call("maintenance", "reset_task", { task_id: task.id, user });
+    if (ok) this._notify("Task reset.");
+  }
+
   async _toggleStartPause(task) {
     const user = this._getUser();
     const locked = task.locked_by;
@@ -592,6 +607,7 @@ class MaintenanceBoardCard extends HTMLElement {
               ${startedAt ? `<div class="small">Started: ${this._escape(startedAt)}</div>` : ""}
               <div class="icons">
                 <button class="smallBtn" data-edit="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>✏️</button>
+                <button class="smallBtn" data-reset="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>♻️</button>
                 <button class="smallBtn danger" data-del="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>🗑️</button>
               </div>
             </div>
@@ -641,6 +657,14 @@ class MaintenanceBoardCard extends HTMLElement {
         const id = btn.getAttribute("data-edit");
         const task = byId.get(id);
         if (task) this._openEdit(task);
+      };
+    });
+
+    listEl.querySelectorAll("button[data-reset]").forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute("data-reset");
+        const task = byId.get(id);
+        if (task) await this._resetTask(task);
       };
     });
 
