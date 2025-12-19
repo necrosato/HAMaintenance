@@ -8,11 +8,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .storage import MaintenanceDB, utcnow
+from .storage import MaintenanceDB, _dt_to_iso, utcnow
 
 
 def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() if dt else None
+    return _dt_to_iso(dt)
 
 
 def _days_left(due: datetime | None) -> int | None:
