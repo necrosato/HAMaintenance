@@ -126,13 +126,12 @@ views:
     cards:
       - type: custom:maintenance-board
         entity: sensor.maintenance_tasks
-        user_entity: select.maintenance_user
 ```
 
 Notes:
 
 * Replace `sensor.maintenance_tasks` if your sensor name differs.
-* `user_entity` is optional but recommended for multi-user locking.
+* The board automatically uses the logged-in Home Assistant user for locks and history.
 
 ---
 

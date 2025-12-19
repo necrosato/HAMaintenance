@@ -51,36 +51,28 @@ UPDATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("est_min"): vol.Coerce(int),
         vol.Optional("notes"): cv.string,
         vol.Optional("last_done"): cv.datetime,
-        vol.Optional("user"): cv.string,
     },
     extra=vol.PREVENT_EXTRA,
 )
 
 DELETE_TASK_SCHEMA = vol.Schema(
-    {vol.Required("task_id"): cv.string, vol.Optional("user"): cv.string},
+    {vol.Required("task_id"): cv.string},
     extra=vol.PREVENT_EXTRA,
 )
 
 START_SCHEMA = vol.Schema(
-    {
-        vol.Required("task_id"): cv.string,
-        vol.Required("user"): cv.string,
-    },
+    {vol.Required("task_id"): cv.string},
     extra=vol.PREVENT_EXTRA,
 )
 
 PAUSE_SCHEMA = vol.Schema(
-    {
-        vol.Required("task_id"): cv.string,
-        vol.Required("user"): cv.string,
-    },
+    {vol.Required("task_id"): cv.string},
     extra=vol.PREVENT_EXTRA,
 )
 
 COMPLETE_SCHEMA = vol.Schema(
     {
         vol.Required("task_id"): cv.string,
-        vol.Required("user"): cv.string,
         # Optional: allow overriding actual minutes spent on completion
         vol.Optional("actual_min"): vol.Coerce(int),
     },
@@ -88,10 +80,7 @@ COMPLETE_SCHEMA = vol.Schema(
 )
 
 RESET_SCHEMA = vol.Schema(
-    {
-        vol.Required("task_id"): cv.string,
-        vol.Required("user"): cv.string,
-    },
+    {vol.Required("task_id"): cv.string},
     extra=vol.PREVENT_EXTRA,
 )
 
@@ -125,6 +114,14 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
             return 0
 
         return max(0, int((now - started).total_seconds()))
+
+    async def _resolve_user(call: ServiceCall) -> str:
+        user_id = call.context.user_id
+        if user_id:
+            user = await hass.auth.async_get_user(user_id)
+            if user:
+                return user.name or user_id
+        return "unknown"
 
     async def handle_add_task(call: ServiceCall) -> None:
         data = ADD_TASK_SCHEMA(dict(call.data))
@@ -173,7 +170,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_update_task(call: ServiceCall) -> None:
         data = UPDATE_TASK_SCHEMA(dict(call.data))
         task_id = data["task_id"]
-        user = data.get("user")
+        user = await _resolve_user(call)
 
         t = db.get(task_id)
         if not t:
@@ -217,7 +214,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_delete_task(call: ServiceCall) -> None:
         data = DELETE_TASK_SCHEMA(dict(call.data))
         task_id = data["task_id"]
-        user = data.get("user")
+        user = await _resolve_user(call)
 
         if not db.get(task_id):
             raise HomeAssistantError(f"Unknown task: {task_id}")
@@ -233,7 +230,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_start_task(call: ServiceCall) -> None:
         data = START_SCHEMA(dict(call.data))
         task_id = data["task_id"]
-        user = data["user"]
+        user = await _resolve_user(call)
 
         t = db.get(task_id)
         if not t:
@@ -263,7 +260,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_pause_task(call: ServiceCall) -> None:
         data = PAUSE_SCHEMA(dict(call.data))
         task_id = data["task_id"]
-        user = data["user"]
+        user = await _resolve_user(call)
 
         t = db.get(task_id)
         if not t:
@@ -286,7 +283,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_complete_task(call: ServiceCall) -> None:
         data = COMPLETE_SCHEMA(dict(call.data))
         task_id = data["task_id"]
-        user = data["user"]
+        user = await _resolve_user(call)
         actual_min = data.get("actual_min")
 
         t = db.get(task_id)
@@ -345,7 +342,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_reset_task(call: ServiceCall) -> None:
         data = RESET_SCHEMA(dict(call.data))
         task_id = data["task_id"]
-        user = data["user"]
+        user = await _resolve_user(call)
 
         t = db.get(task_id)
         if not t:

@@ -220,12 +220,10 @@ class MaintenanceBoardCard extends HTMLElement {
   }
 
   _getUser() {
-    const cfg = this._config || {};
-    if (cfg.user_entity) {
-      const st = this._hass.states[cfg.user_entity];
-      if (st && st.state && st.state !== "unknown" && st.state !== "unavailable") return st.state;
-    }
-    return cfg.user || "unknown";
+    const hassUser = this._hass?.user;
+    if (hassUser) return hassUser.name || hassUser.id || "unknown";
+
+    return "unknown";
   }
 
   _fmtDuration(sec) {
@@ -427,7 +425,6 @@ class MaintenanceBoardCard extends HTMLElement {
   async _saveTask() {
     const { title, zone, freq_days, est_min, notes, last_done } = this._readModalForm();
     const isEdit = !!this._editing;
-    const user = this._getUser();
 
     if (!title) return this._setModalError("Title is required.");
     if (!zone) return this._setModalError("Zone is required (or enter a new zone).");
@@ -453,7 +450,6 @@ class MaintenanceBoardCard extends HTMLElement {
     }
 
     payload.task_id = this._editing.id;
-    payload.user = user;
     const res = await this._call("maintenance", "update_task", payload, { onError: (msg) => this._setModalError(msg) });
     if (!res?.ok) return;
     this._setModalError("");
@@ -470,7 +466,7 @@ class MaintenanceBoardCard extends HTMLElement {
     }
     const yes = confirm(`Delete task?\n\n[${task.zone}] ${task.title}\n\nThis cannot be undone.`);
     if (!yes) return;
-    const { ok } = await this._call("maintenance", "delete_task", { task_id: task.id, user });
+    const { ok } = await this._call("maintenance", "delete_task", { task_id: task.id });
     if (ok) this._notify("Task deleted.");
   }
 
@@ -485,7 +481,7 @@ class MaintenanceBoardCard extends HTMLElement {
     const yes = confirm(`Reset task history?\n\n[${task.zone}] ${task.title}\n\nThis clears averages and timers but keeps last done + frequency.`);
     if (!yes) return;
 
-    const { ok } = await this._call("maintenance", "reset_task", { task_id: task.id, user });
+    const { ok } = await this._call("maintenance", "reset_task", { task_id: task.id });
     if (ok) this._notify("Task reset.");
   }
 
@@ -497,7 +493,7 @@ class MaintenanceBoardCard extends HTMLElement {
       return;
     }
     const svc = (task.status === "running") ? "pause_task" : "start_task";
-    await this._call("maintenance", svc, { task_id: task.id, user });
+    await this._call("maintenance", svc, { task_id: task.id });
   }
 
   async _complete(task) {
@@ -507,7 +503,7 @@ class MaintenanceBoardCard extends HTMLElement {
       this._notify(`Task is locked by ${locked}`);
       return;
     }
-    await this._call("maintenance", "complete_task", { task_id: task.id, user });
+    await this._call("maintenance", "complete_task", { task_id: task.id });
   }
 
   _updateLiveDurations(tasks) {

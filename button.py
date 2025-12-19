@@ -17,14 +17,11 @@ def _find_entity_id(hass: HomeAssistant, domain: str, contains: str) -> str:
     raise HomeAssistantError(f"Could not find {domain} entity containing '{contains}'")
 
 
-def _get_selected(hass: HomeAssistant, task_select_eid: str, user_select_eid: str) -> tuple[str, str]:
+def _get_selected(hass: HomeAssistant, task_select_eid: str) -> str:
     task_id = hass.states.get(task_select_eid).state
-    user = hass.states.get(user_select_eid).state
     if task_id in ("unknown", "unavailable", "", None):
         raise HomeAssistantError("No task selected")
-    if user in ("unknown", "unavailable", "", None):
-        raise HomeAssistantError("No user selected")
-    return task_id, user
+    return task_id
 
 
 class _BaseMaintenanceButton(ButtonEntity):
@@ -36,41 +33,33 @@ class _BaseMaintenanceButton(ButtonEntity):
         self._attr_name = name
         self._attr_unique_id = unique_id
         self._task_select_eid: str | None = None
-        self._user_select_eid: str | None = None
 
     async def async_added_to_hass(self) -> None:
         # Find our selects once entity registry is available
         self._task_select_eid = _find_entity_id(self.hass, "select", "maintenance_task")
-        self._user_select_eid = _find_entity_id(self.hass, "select", "maintenance_user")
 
-    def _selected(self) -> tuple[str, str]:
-        if not self._task_select_eid or not self._user_select_eid:
+    def _selected(self) -> str:
+        if not self._task_select_eid:
             raise HomeAssistantError("Selector entities not ready")
-        return _get_selected(self.hass, self._task_select_eid, self._user_select_eid)
+        return _get_selected(self.hass, self._task_select_eid)
 
 
 class MaintenanceStartButton(_BaseMaintenanceButton):
     async def async_press(self) -> None:
-        task_id, user = self._selected()
-        await self.hass.services.async_call(
-            DOMAIN, "start_task", {"task_id": task_id, "user": user}, blocking=True
-        )
+        task_id = self._selected()
+        await self.hass.services.async_call(DOMAIN, "start_task", {"task_id": task_id}, blocking=True)
 
 
 class MaintenancePauseButton(_BaseMaintenanceButton):
     async def async_press(self) -> None:
-        task_id, user = self._selected()
-        await self.hass.services.async_call(
-            DOMAIN, "pause_task", {"task_id": task_id, "user": user}, blocking=True
-        )
+        task_id = self._selected()
+        await self.hass.services.async_call(DOMAIN, "pause_task", {"task_id": task_id}, blocking=True)
 
 
 class MaintenanceCompleteButton(_BaseMaintenanceButton):
     async def async_press(self) -> None:
-        task_id, user = self._selected()
-        await self.hass.services.async_call(
-            DOMAIN, "complete_task", {"task_id": task_id, "user": user}, blocking=True
-        )
+        task_id = self._selected()
+        await self.hass.services.async_call(DOMAIN, "complete_task", {"task_id": task_id}, blocking=True)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
