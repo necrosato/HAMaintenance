@@ -21,7 +21,6 @@ ATTR_ZONE = "zone"
 ATTR_FREQ_DAYS = "freq_days"
 ATTR_DUE = "due"
 ATTR_NOTES = "notes"
-ATTR_USER = "user"
 ATTR_MANUAL_MIN = "manual_minutes"
 
 STATUS_IDLE = "idle"

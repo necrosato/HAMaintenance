@@ -47,24 +47,17 @@ start_task:
   fields:
     task_id:
       required: true
-    user:
-      required: true
-      example: "Naookie"
 
 pause_task:
   name: Pause task
   fields:
     task_id:
       required: true
-    user:
-      required: true
 
 complete_task:
   name: Complete task
   fields:
     task_id:
-      required: true
-    user:
       required: true
     actual_min:
       required: false
@@ -75,7 +68,5 @@ reset_task:
   description: Clear averages and timers while keeping last done + frequency.
   fields:
     task_id:
-      required: true
-    user:
       required: true
 
