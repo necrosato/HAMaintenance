@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -30,7 +31,7 @@ def _compute_due(last_done: datetime | None, freq_days: int) -> datetime | None:
 
 ADD_TASK_SCHEMA = vol.Schema(
     {
-        vol.Required("task_id"): cv.string,
+        vol.Optional("task_id"): cv.string,
         vol.Required("title"): cv.string,
         vol.Required("zone"): cv.string,
         vol.Optional("freq_days", default=0): vol.Coerce(int),
@@ -96,6 +97,26 @@ RESET_SCHEMA = vol.Schema(
 
 
 async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
+    def _norm(s: str) -> str:
+        return " ".join(str(s or "").strip().split()).lower()
+
+    def _task_key(zone: str, title: str) -> tuple[str, str]:
+        return (_norm(zone), _norm(title))
+
+    def _find_by_key(key: tuple[str, str], *, exclude_id: str | None = None) -> Task | None:
+        for existing in db.tasks.values():
+            if exclude_id and existing.id == exclude_id:
+                continue
+            if _task_key(existing.zone, existing.title) == key:
+                return existing
+        return None
+
+    def _new_task_id() -> str:
+        task_id = uuid.uuid4().hex
+        while db.get(task_id):
+            task_id = uuid.uuid4().hex
+        return task_id
+
     def _elapsed_seconds(started_at: datetime | None, now: datetime) -> int:
         """Calculate elapsed seconds between now and a (possibly naive) start time."""
 
@@ -108,12 +129,19 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_add_task(call: ServiceCall) -> None:
         data = ADD_TASK_SCHEMA(dict(call.data))
 
-        task_id = data["task_id"].strip()
-        if not task_id:
-            raise HomeAssistantError("task_id cannot be empty")
+        title = data["title"].strip()
+        if not title:
+            raise HomeAssistantError("Title cannot be empty")
 
+        zone = data["zone"].strip() or "Unsorted"
+        key = _task_key(zone, title)
+        existing = _find_by_key(key)
+        if existing:
+            raise HomeAssistantError(f"A task already exists: [{existing.zone}] {existing.title}")
+
+        task_id = (data.get("task_id") or "").strip() or _new_task_id()
         if db.get(task_id):
-            raise HomeAssistantError(f"Task already exists: {task_id}")
+            task_id = _new_task_id()
 
         freq_days = int(data.get("freq_days", 0))
         est_min = int(data.get("est_min", 0))
@@ -123,8 +151,8 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
 
         t = Task(
             id=task_id,
-            title=data["title"].strip(),
-            zone=data["zone"].strip() or "Unsorted",
+            title=title,
+            zone=zone,
             freq_days=freq_days,
             est_min=est_min,
             avg_min=est_min,  # start avg at estimate (optional)
@@ -153,6 +181,16 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
 
         if t.locked_by is not None and t.locked_by != user:
             raise HomeAssistantError(f"Task is locked by {t.locked_by}")
+
+        next_title = data["title"].strip() if "title" in data else t.title
+        if not next_title:
+            raise HomeAssistantError("Title cannot be empty")
+        next_zone_raw = data["zone"] if "zone" in data else t.zone
+        next_zone = next_zone_raw.strip() or "Unsorted"
+        next_key = _task_key(next_zone, next_title)
+        existing = _find_by_key(next_key, exclude_id=t.id)
+        if existing:
+            raise HomeAssistantError(f"A task already exists: [{existing.zone}] {existing.title}")
 
         # Apply updates
         if "title" in data:
