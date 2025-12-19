@@ -572,7 +572,7 @@ class MaintenanceBoardCard extends HTMLElement {
       const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
 
       const borderClass = (daysLeft !== null && daysLeft !== undefined && daysLeft < 0) ? "danger" : "ok";
-      const lockTxt = locked ? `locked by ${locked}` : "unlocked";
+      const statusTxt = (status === "idle") ? "idle" : `${status}: ${locked || "unknown"}`;
       const est = t.est_min ? `${t.est_min}m est` : "";
       const hasAvg = t.avg_min !== undefined && t.avg_min !== null;
       const avg = hasAvg ? `${t.avg_min}m avg` : "";
@@ -594,8 +594,7 @@ class MaintenanceBoardCard extends HTMLElement {
                 ${freq ? `<span class="pill">${this._escape(freq)}</span>` : ""}
                 ${est ? `<span class="pill">${this._escape(est)}</span>` : ""}
                 ${avg ? `<span class="pill">${this._escape(avg)}</span>` : ""}
-                <span class="pill">${this._escape(status)}</span>
-                <span class="pill">${this._escape(lockTxt)}</span>
+                <span class="pill">${this._escape(statusTxt)}</span>
                 <span class="pill">${this._escape(lastDoneLabel)}</span>
               </div>
               ${note ? `<div class="note">${this._escape(note)}</div>` : ""}
