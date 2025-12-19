@@ -5,6 +5,8 @@ class MaintenanceBoardCard extends HTMLElement {
     this._lastRender = 0;
     this._editing = null;
     this._modalOpen = false;
+    this._renderedKey = null;
+    this._durationEls = new Map();
 
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
@@ -239,6 +241,28 @@ class MaintenanceBoardCard extends HTMLElement {
     return `${m}m`;
   }
 
+  _fmtDate(dateStr) {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = `${d.getMonth() + 1}`.padStart(2, "0");
+    const day = `${d.getDate()}`.padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  _fmtDateTimeLocal(dateStr) {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = `${d.getMonth() + 1}`.padStart(2, "0");
+    const day = `${d.getDate()}`.padStart(2, "0");
+    const h = `${d.getHours()}`.padStart(2, "0");
+    const min = `${d.getMinutes()}`.padStart(2, "0");
+    return `${y}-${m}-${day} ${h}:${min}`;
+  }
+
   _liveTotalSec(t) {
     const now = Date.now();
     let total = (t.accum_sec || 0);
@@ -293,6 +317,10 @@ class MaintenanceBoardCard extends HTMLElement {
   }
 
   _openEdit(task) {
+    if (task?.locked_by && task.locked_by !== this._getUser()) {
+      this._notify(`Task is locked by ${task.locked_by}`);
+      return;
+    }
     this._editing = task;
     this._openModal();
   }
@@ -452,9 +480,14 @@ class MaintenanceBoardCard extends HTMLElement {
   }
 
   async _deleteTask(task) {
+    const user = this._getUser();
+    const locked = task.locked_by;
+    if (locked && locked !== user) {
+      this._notify(`Task is locked by ${locked}`);
+      return;
+    }
     const yes = confirm(`Delete task?\n\n[${task.zone}] ${task.title}\n\nThis cannot be undone.`);
     if (!yes) return;
-    const user = this._getUser();
     const ok = await this._call("maintenance", "delete_task", { task_id: task.id, user });
     if (ok) this._notify("Task deleted.");
   }
@@ -472,7 +505,21 @@ class MaintenanceBoardCard extends HTMLElement {
 
   async _complete(task) {
     const user = this._getUser();
+    const locked = task.locked_by;
+    if (locked && locked !== user) {
+      this._notify(`Task is locked by ${locked}`);
+      return;
+    }
     await this._call("maintenance", "complete_task", { task_id: task.id, user });
+  }
+
+  _updateLiveDurations(tasks) {
+    if (!this._durationEls || this._durationEls.size === 0) return;
+    tasks.forEach(t => {
+      const key = this._escape(t.id);
+      const el = this._durationEls.get(key);
+      if (el) el.textContent = this._fmtDuration(this._liveTotalSec(t));
+    });
   }
 
   _render() {
@@ -487,12 +534,21 @@ class MaintenanceBoardCard extends HTMLElement {
       countEl.textContent = `Missing entity: ${this._config.entity}`;
       filterEl.textContent = "";
       listEl.innerHTML = "";
+      this._durationEls = new Map();
+      this._renderedKey = null;
       return;
     }
 
     const user = this._getUser();
     countEl.textContent = `${tasks.length} task(s)`;
     filterEl.textContent = `User: ${user}`;
+
+    const stateKey = JSON.stringify(tasks || []);
+    const canReuse = this._renderedKey === stateKey && this._durationEls.size > 0;
+    if (canReuse) {
+      this._updateLiveDurations(tasks);
+      return;
+    }
 
     const html = tasks.map(t => {
       const daysLeft = t.days_left;
@@ -502,11 +558,14 @@ class MaintenanceBoardCard extends HTMLElement {
 
       const locked = t.locked_by;
       const status = t.status || "idle";
+      const isLockedByOther = locked && locked !== user;
 
       const canStartPause = (!locked || locked === user);
-      const startPauseLabel = (status === "running") ? "Pause" : "Start";
+      const startPauseLabel = (status === "running") ? "Pause" : (status === "paused" ? "Resume" : "Start");
       const totalSec = this._liveTotalSec(t);
       const durTxt = this._fmtDuration(totalSec);
+      const lastDone = this._fmtDate(t.last_done) || "never";
+      const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
 
       const borderClass = (daysLeft !== null && daysLeft !== undefined && daysLeft < 0) ? "danger" : "ok";
       const lockTxt = locked ? `locked by ${locked}` : "unlocked";
@@ -528,16 +587,18 @@ class MaintenanceBoardCard extends HTMLElement {
                 ${avg ? `<span class="pill">${this._escape(avg)}</span>` : ""}
                 <span class="pill">${this._escape(status)}</span>
                 <span class="pill">${this._escape(lockTxt)}</span>
+                <span class="pill">Last done: ${this._escape(lastDone)}</span>
               </div>
               ${note ? `<div class="note">${this._escape(note)}</div>` : ""}
             </div>
 
             <div class="right">
-              <div>${this._escape(durTxt)}</div>
+              <div class="duration" data-duration="${this._escape(t.id)}">${this._escape(durTxt)}</div>
               <div class="small">${this._escape(t.id)}</div>
+              ${startedAt ? `<div class="small">Started: ${this._escape(startedAt)}</div>` : ""}
               <div class="icons">
-                <button class="smallBtn" data-edit="${this._escape(t.id)}">✏️</button>
-                <button class="smallBtn danger" data-del="${this._escape(t.id)}">🗑️</button>
+                <button class="smallBtn" data-edit="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>✏️</button>
+                <button class="smallBtn danger" data-del="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>🗑️</button>
               </div>
             </div>
           </div>
@@ -546,7 +607,7 @@ class MaintenanceBoardCard extends HTMLElement {
             <button data-sp="${this._escape(t.id)}" ${canStartPause ? "" : "disabled"}>
               ${this._escape(startPauseLabel)}
             </button>
-            <button class="danger" data-c="${this._escape(t.id)}">
+            <button class="danger" data-c="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>
               Complete
             </button>
           </div>
@@ -555,6 +616,13 @@ class MaintenanceBoardCard extends HTMLElement {
     }).join("");
 
     listEl.innerHTML = html;
+    this._renderedKey = stateKey;
+
+    this._durationEls = new Map();
+    listEl.querySelectorAll(".duration").forEach(el => {
+      const id = el.getAttribute("data-duration");
+      if (id) this._durationEls.set(id, el);
+    });
 
     const byId = new Map(tasks.map(t => [t.id, t]));
 
