@@ -86,6 +86,14 @@ COMPLETE_SCHEMA = vol.Schema(
     extra=vol.PREVENT_EXTRA,
 )
 
+RESET_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): cv.string,
+        vol.Required("user"): cv.string,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
 
 async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     def _elapsed_seconds(started_at: datetime | None, now: datetime) -> int:
@@ -294,6 +302,30 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         await db.async_save()
         await db.notify()
 
+    async def handle_reset_task(call: ServiceCall) -> None:
+        data = RESET_SCHEMA(dict(call.data))
+        task_id = data["task_id"]
+        user = data["user"]
+
+        t = db.get(task_id)
+        if not t:
+            raise HomeAssistantError(f"Unknown task: {task_id}")
+
+        if t.locked_by is not None and t.locked_by != user:
+            raise HomeAssistantError(f"Task is locked by {t.locked_by}")
+
+        t.n = 0
+        t.avg_min = int(t.est_min or 0)
+        t.accum_sec = 0
+        t.started_at = None
+        t.status = "idle"
+        t.locked_by = None
+        t.due = _compute_due(t.last_done, int(t.freq_days or 0))
+
+        db.upsert(t)
+        await db.async_save()
+        await db.notify()
+
     hass.services.async_register(DOMAIN, "add_task", handle_add_task, schema=ADD_TASK_SCHEMA)
     hass.services.async_register(DOMAIN, "update_task", handle_update_task, schema=UPDATE_TASK_SCHEMA)
     hass.services.async_register(DOMAIN, "delete_task", handle_delete_task, schema=DELETE_TASK_SCHEMA)
@@ -301,4 +333,5 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     hass.services.async_register(DOMAIN, "start_task", handle_start_task, schema=START_SCHEMA)
     hass.services.async_register(DOMAIN, "pause_task", handle_pause_task, schema=PAUSE_SCHEMA)
     hass.services.async_register(DOMAIN, "complete_task", handle_complete_task, schema=COMPLETE_SCHEMA)
+    hass.services.async_register(DOMAIN, "reset_task", handle_reset_task, schema=RESET_SCHEMA)
 
