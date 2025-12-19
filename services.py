@@ -3,238 +3,310 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import voluptuous as vol
-
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
-from .const import (
-    ATTR_DUE,
-    ATTR_FREQ_DAYS,
-    ATTR_NOTES,
-    ATTR_TASK_ID,
-    ATTR_TITLE,
-    ATTR_USER,
-    ATTR_ZONE,
-    ATTR_MANUAL_MIN,
-    DOMAIN,
-    STATUS_IDLE,
-    STATUS_PAUSED,
-    STATUS_RUNNING,
-    SERVICE_ADD_TASK,
-    SERVICE_COMPLETE_TASK,
-    SERVICE_DELETE_TASK,
-    SERVICE_PAUSE_TASK,
-    SERVICE_START_TASK,
-    SERVICE_UPDATE_TASK,
-)
+from .const import DOMAIN
 from .storage import MaintenanceDB, Task, utcnow
 
 
-def _parse_dt(s: str | None) -> datetime | None:
-    if not s:
+def _ensure_aware(dt: datetime | None) -> datetime | None:
+    """Ensure datetime is timezone-aware (UTC)."""
+    if dt is None:
         return None
-    dt = datetime.fromisoformat(s)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
-ADD_SCHEMA = vol.Schema(
+def _compute_due(last_done: datetime | None, freq_days: int) -> datetime | None:
+    if last_done is None:
+        return None
+    if freq_days <= 0:
+        return None
+    return last_done + timedelta(days=int(freq_days))
+
+
+ADD_TASK_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_TASK_ID): cv.slug,
-        vol.Required(ATTR_TITLE): cv.string,
-        vol.Required(ATTR_ZONE): cv.string,
-        vol.Optional(ATTR_FREQ_DAYS, default=0): vol.Coerce(int),
-        vol.Optional(ATTR_DUE): cv.string,
-        vol.Optional(ATTR_NOTES, default=""): cv.string,
-        vol.Optional("est_min"): vol.Coerce(int),
+        vol.Required("task_id"): cv.string,
+        vol.Required("title"): cv.string,
+        vol.Required("zone"): cv.string,
+        vol.Optional("freq_days", default=0): vol.Coerce(int),
+        vol.Optional("est_min", default=0): vol.Coerce(int),
+        vol.Optional("notes", default=""): cv.string,
+
+        # ✅ new fields
         vol.Optional("last_done"): cv.datetime,
         vol.Optional("due"): cv.datetime,
-    }
+    },
+    extra=vol.PREVENT_EXTRA,
 )
 
-UPDATE_SCHEMA = vol.Schema(
+UPDATE_TASK_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_TASK_ID): cv.slug,
-        vol.Optional(ATTR_TITLE): cv.string,
-        vol.Optional(ATTR_ZONE): cv.string,
-        vol.Optional(ATTR_FREQ_DAYS): vol.Coerce(int),
-        vol.Optional(ATTR_DUE): cv.string,
-        vol.Optional(ATTR_NOTES): cv.string,
+        vol.Required("task_id"): cv.string,
+        vol.Optional("title"): cv.string,
+        vol.Optional("zone"): cv.string,
+        vol.Optional("freq_days"): vol.Coerce(int),
         vol.Optional("est_min"): vol.Coerce(int),
+        vol.Optional("notes"): cv.string,
+
+        # ✅ new fields
         vol.Optional("last_done"): cv.datetime,
         vol.Optional("due"): cv.datetime,
-    }
+    },
+    extra=vol.PREVENT_EXTRA,
 )
 
-DELETE_SCHEMA = vol.Schema({vol.Required(ATTR_TASK_ID): cv.slug})
+DELETE_TASK_SCHEMA = vol.Schema(
+    {vol.Required("task_id"): cv.string},
+    extra=vol.PREVENT_EXTRA,
+)
 
 START_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_TASK_ID): cv.slug,
-        vol.Required(ATTR_USER): cv.string,
-    }
+        vol.Required("task_id"): cv.string,
+        vol.Required("user"): cv.string,
+    },
+    extra=vol.PREVENT_EXTRA,
 )
 
 PAUSE_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_TASK_ID): cv.slug,
-        vol.Required(ATTR_USER): cv.string,
-    }
+        vol.Required("task_id"): cv.string,
+        vol.Required("user"): cv.string,
+    },
+    extra=vol.PREVENT_EXTRA,
 )
 
 COMPLETE_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_TASK_ID): cv.slug,
-        vol.Required(ATTR_USER): cv.string,
-        vol.Optional(ATTR_MANUAL_MIN): vol.Coerce(int),
-    }
+        vol.Required("task_id"): cv.string,
+        vol.Required("user"): cv.string,
+        # Optional: allow overriding actual minutes spent on completion
+        vol.Optional("actual_min"): vol.Coerce(int),
+    },
+    extra=vol.PREVENT_EXTRA,
 )
 
 
-def _ensure_task(db: MaintenanceDB, task_id: str) -> Task:
-    task = db.get(task_id)
-    if not task:
-        raise vol.Invalid(f"Unknown task_id: {task_id}")
-    return task
+async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
+    async def handle_add_task(call: ServiceCall) -> None:
+        data = ADD_TASK_SCHEMA(dict(call.data))
 
+        task_id = data["task_id"].strip()
+        if not task_id:
+            raise HomeAssistantError("task_id cannot be empty")
 
-def _assert_lock_owner(task: Task, user: str) -> None:
-    if task.locked_by is not None and task.locked_by != user:
-        raise vol.Invalid(f"Task is locked by {task.locked_by}")
+        if db.get(task_id):
+            raise HomeAssistantError(f"Task already exists: {task_id}")
 
+        freq_days = int(data.get("freq_days", 0))
+        est_min = int(data.get("est_min", 0))
 
-async def async_register_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
-    async def add_task(call: ServiceCall) -> None:
-        tid = call.data[ATTR_TASK_ID]
+        last_done = _ensure_aware(data.get("last_done"))
+        due = _ensure_aware(data.get("due"))
+
+        # Rule: if last_done is provided and due is not, compute due from last_done+freq_days
+        if due is None and last_done is not None:
+            due = _compute_due(last_done, freq_days)
+
         t = Task(
-            id=tid,
-            title=call.data[ATTR_TITLE],
-            zone=call.data[ATTR_ZONE],
-            freq_days=int(call.data.get(ATTR_FREQ_DAYS, 0)),
-            due=_parse_dt(call.data.get(ATTR_DUE)),
-            notes=call.data.get(ATTR_NOTES, ""),
+            id=task_id,
+            title=data["title"].strip(),
+            zone=data["zone"].strip() or "Unsorted",
+            freq_days=freq_days,
+            est_min=est_min,
+            avg_min=est_min,  # start avg at estimate (optional)
+            n=0,
+            status="idle",
+            locked_by=None,
+            started_at=None,
+            accum_sec=0,
+            notes=data.get("notes", "") or "",
+            last_done=last_done,
+            due=due,
         )
-        # initialize avg/est
-        t.est_min = 15
-        t.avg_min = 15
-        t.n = 0
 
         db.upsert(t)
         await db.async_save()
         await db.notify()
 
-    async def update_task(call: ServiceCall) -> None:
-        tid = call.data[ATTR_TASK_ID]
-        t = _ensure_task(db, tid)
+    async def handle_update_task(call: ServiceCall) -> None:
+        data = UPDATE_TASK_SCHEMA(dict(call.data))
+        task_id = data["task_id"]
 
-        if ATTR_TITLE in call.data:
-            t.title = call.data[ATTR_TITLE]
-        if ATTR_ZONE in call.data:
-            t.zone = call.data[ATTR_ZONE]
-        if ATTR_FREQ_DAYS in call.data:
-            t.freq_days = int(call.data[ATTR_FREQ_DAYS])
-        if ATTR_DUE in call.data:
-            t.due = _parse_dt(call.data.get(ATTR_DUE))
-        if ATTR_NOTES in call.data:
-            t.notes = call.data.get(ATTR_NOTES, "")
+        t = db.get(task_id)
+        if not t:
+            raise HomeAssistantError(f"Unknown task: {task_id}")
+
+        # Apply updates
+        if "title" in data:
+            t.title = data["title"].strip()
+        if "zone" in data:
+            t.zone = data["zone"].strip() or "Unsorted"
+        if "freq_days" in data:
+            t.freq_days = int(data["freq_days"])
+        if "est_min" in data:
+            t.est_min = int(data["est_min"])
+        if "notes" in data:
+            t.notes = data["notes"] or ""
+
+        last_done_provided = "last_done" in data
+        due_provided = "due" in data
+
+        if last_done_provided:
+            t.last_done = _ensure_aware(data.get("last_done"))
+        if due_provided:
+            t.due = _ensure_aware(data.get("due"))
+
+        # Rule: if last_done provided and due NOT provided, compute due = last_done + freq_days
+        if last_done_provided and not due_provided:
+            t.due = _compute_due(t.last_done, int(t.freq_days or 0))
+
+        # Also: if freq_days changed and due not explicitly provided, keep due consistent with last_done
+        if ("freq_days" in data) and (not due_provided) and (not last_done_provided) and t.last_done:
+            t.due = _compute_due(t.last_done, int(t.freq_days or 0))
 
         db.upsert(t)
         await db.async_save()
         await db.notify()
 
-    async def delete_task(call: ServiceCall) -> None:
-        tid = call.data[ATTR_TASK_ID]
-        db.delete(tid)
+    async def handle_delete_task(call: ServiceCall) -> None:
+        data = DELETE_TASK_SCHEMA(dict(call.data))
+        task_id = data["task_id"]
+
+        if not db.get(task_id):
+            raise HomeAssistantError(f"Unknown task: {task_id}")
+
+        db.delete(task_id)
         await db.async_save()
         await db.notify()
 
-    async def start_task(call: ServiceCall) -> None:
-        tid = call.data[ATTR_TASK_ID]
-        user = call.data[ATTR_USER]
-        t = _ensure_task(db, tid)
+    async def handle_start_task(call: ServiceCall) -> None:
+        data = START_SCHEMA(dict(call.data))
+        task_id = data["task_id"]
+        user = data["user"]
 
-        # If locked by another user, reject
-        _assert_lock_owner(t, user)
+        t = db.get(task_id)
+        if not t:
+            raise HomeAssistantError(f"Unknown task: {task_id}")
 
-        # Lock and start timing
+        # Lock rules
+        if t.locked_by is not None and t.locked_by != user:
+            raise HomeAssistantError(f"Task is locked by {t.locked_by}")
+
+        # If already running, ignore
+        if t.status == "running" and t.started_at:
+            return
+
         t.locked_by = user
-        t.status = STATUS_RUNNING
+        t.status = "running"
         t.started_at = utcnow()
 
         db.upsert(t)
         await db.async_save()
         await db.notify()
 
-    async def pause_task(call: ServiceCall) -> None:
-        tid = call.data[ATTR_TASK_ID]
-        user = call.data[ATTR_USER]
-        t = _ensure_task(db, tid)
+    async def handle_pause_task(call: ServiceCall) -> None:
+        data = PAUSE_SCHEMA(dict(call.data))
+        task_id = data["task_id"]
+        user = data["user"]
 
-        _assert_lock_owner(t, user)
+        t = db.get(task_id)
+        if not t:
+            raise HomeAssistantError(f"Unknown task: {task_id}")
 
-        if t.status != STATUS_RUNNING or not t.started_at:
-            raise vol.Invalid("Task is not running")
+        if t.locked_by is not None and t.locked_by != user:
+            raise HomeAssistantError(f"Task is locked by {t.locked_by}")
+
+        if t.status != "running" or not t.started_at:
+            # nothing to pause
+            t.status = "paused" if t.locked_by == user else (t.status or "idle")
+            db.upsert(t)
+            await db.async_save()
+            await db.notify()
+            return
 
         now = utcnow()
         elapsed = int((now - t.started_at).total_seconds())
-        t.accum_sec = int(t.accum_sec) + max(0, elapsed)
+        if elapsed < 0:
+            elapsed = 0
+
+        t.accum_sec = int(t.accum_sec or 0) + elapsed
         t.started_at = None
-        t.status = STATUS_PAUSED
-        t.locked_by = user  # keep lock while paused
+        t.status = "paused"
 
         db.upsert(t)
         await db.async_save()
         await db.notify()
 
-    async def complete_task(call: ServiceCall) -> None:
-        tid = call.data[ATTR_TASK_ID]
-        user = call.data[ATTR_USER]
-        manual_min = call.data.get(ATTR_MANUAL_MIN)
-        t = _ensure_task(db, tid)
+    async def handle_complete_task(call: ServiceCall) -> None:
+        data = COMPLETE_SCHEMA(dict(call.data))
+        task_id = data["task_id"]
+        user = data["user"]
+        actual_min = data.get("actual_min")
 
-        _assert_lock_owner(t, user)
+        t = db.get(task_id)
+        if not t:
+            raise HomeAssistantError(f"Unknown task: {task_id}")
 
-        # Fold running time into accum
+        # Respect lock if someone else holds it
+        if t.locked_by is not None and t.locked_by != user:
+            raise HomeAssistantError(f"Task is locked by {t.locked_by}")
+
         now = utcnow()
-        if t.status == STATUS_RUNNING and t.started_at:
+
+        # If running, fold running time into accum before completing
+        if t.status == "running" and t.started_at:
             elapsed = int((now - t.started_at).total_seconds())
-            t.accum_sec = int(t.accum_sec) + max(0, elapsed)
+            if elapsed < 0:
+                elapsed = 0
+            t.accum_sec = int(t.accum_sec or 0) + elapsed
 
-        # Actual minutes
-        if manual_min is not None and int(manual_min) > 0:
-            actual_min = int(manual_min)
+        # Determine minutes spent for stats
+        spent_min = None
+        if actual_min is not None:
+            spent_min = max(0, int(actual_min))
         else:
-            actual_min = int(round(t.accum_sec / 60.0)) if t.accum_sec > 0 else 0
+            spent_min = max(0, int((int(t.accum_sec or 0)) // 60))
 
-        # Rolling average update (only if we have a real measurement)
-        if actual_min > 0:
-            n = int(t.n)
-            avg = int(t.avg_min or t.est_min or actual_min)
-            new_avg = int(round((avg * n + actual_min) / (n + 1)))
-            t.n = n + 1
-            t.avg_min = new_avg
-            t.est_min = new_avg  # keep them aligned for now
+        # Update avg_min (simple running average)
+        prev_n = int(t.n or 0)
+        prev_avg = int(t.avg_min or 0)
+        new_n = prev_n + 1
+        if new_n <= 0:
+            new_avg = spent_min
+        else:
+            new_avg = int(round((prev_avg * prev_n + spent_min) / new_n))
 
-        # Recurrence from completion time (your requirement)
+        t.n = new_n
+        t.avg_min = new_avg
+
+        # Completion sets last_done and reschedules due from completion time (your requirement)
         t.last_done = now
-        if int(t.freq_days) > 0:
+        if int(t.freq_days or 0) > 0:
             t.due = now + timedelta(days=int(t.freq_days))
+        else:
+            t.due = None
 
-        # Clear lock and timer state
+        # Clear runtime state
         t.locked_by = None
         t.started_at = None
         t.accum_sec = 0
-        t.status = STATUS_IDLE
+        t.status = "idle"
 
         db.upsert(t)
         await db.async_save()
         await db.notify()
 
-    hass.services.async_register(DOMAIN, SERVICE_ADD_TASK, add_task, schema=ADD_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_UPDATE_TASK, update_task, schema=UPDATE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_DELETE_TASK, delete_task, schema=DELETE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_START_TASK, start_task, schema=START_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_PAUSE_TASK, pause_task, schema=PAUSE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_COMPLETE_TASK, complete_task, schema=COMPLETE_SCHEMA)
+    hass.services.async_register(DOMAIN, "add_task", handle_add_task, schema=ADD_TASK_SCHEMA)
+    hass.services.async_register(DOMAIN, "update_task", handle_update_task, schema=UPDATE_TASK_SCHEMA)
+    hass.services.async_register(DOMAIN, "delete_task", handle_delete_task, schema=DELETE_TASK_SCHEMA)
+
+    hass.services.async_register(DOMAIN, "start_task", handle_start_task, schema=START_SCHEMA)
+    hass.services.async_register(DOMAIN, "pause_task", handle_pause_task, schema=PAUSE_SCHEMA)
+    hass.services.async_register(DOMAIN, "complete_task", handle_complete_task, schema=COMPLETE_SCHEMA)
 

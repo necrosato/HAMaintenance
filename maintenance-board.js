@@ -3,7 +3,7 @@ class MaintenanceBoardCard extends HTMLElement {
     if (!config || !config.entity) throw new Error("maintenance-board: entity is required");
     this._config = config;
     this._lastRender = 0;
-    this._editing = null; // task object being edited, or null for add
+    this._editing = null;
     this._modalOpen = false;
 
     if (!this._root) {
@@ -22,8 +22,7 @@ class MaintenanceBoardCard extends HTMLElement {
           .meta { font-size: 12px; opacity: .88; display:flex; gap:8px; flex-wrap: wrap; margin-top: 4px; }
           .right { text-align:right; font-size: 12px; opacity: .9; min-width: 110px; }
           .btns { display:flex; gap:8px; }
-          .rowActions { display:flex; gap:8px; align-items:center; justify-content: space-between; }
-          .icons { display:flex; gap:8px; justify-content:flex-end; }
+          .icons { display:flex; gap:8px; justify-content:flex-end; margin-top: 6px; }
           button {
             border: 1px solid var(--divider-color);
             background: var(--card-background-color);
@@ -144,6 +143,18 @@ class MaintenanceBoardCard extends HTMLElement {
               </div>
             </div>
 
+            <div class="grid">
+              <div>
+                <label>Last done (date)</label>
+                <input id="f_last_done" type="date" />
+                <div class="hint">If set and Due is blank, Due will auto-calc from Frequency.</div>
+              </div>
+              <div>
+                <label>Due date (date)</label>
+                <input id="f_due" type="date" />
+              </div>
+            </div>
+
             <div class="grid1">
               <div>
                 <label>Notes</label>
@@ -164,25 +175,18 @@ class MaintenanceBoardCard extends HTMLElement {
       `;
     }
 
-    // Wire global UI actions once
-    const addBtn = this._root.getElementById("addBtn");
-    addBtn.onclick = () => this._openAdd();
-
-    const closeModal = this._root.getElementById("closeModal");
-    const cancelBtn = this._root.getElementById("cancelBtn");
-    closeModal.onclick = () => this._closeModal();
-    cancelBtn.onclick = () => this._closeModal();
+    // One-time wiring
+    this._root.getElementById("addBtn").onclick = () => this._openAdd();
+    this._root.getElementById("closeModal").onclick = () => this._closeModal();
+    this._root.getElementById("cancelBtn").onclick = () => this._closeModal();
 
     const backdrop = this._root.getElementById("backdrop");
     backdrop.addEventListener("click", (e) => {
       if (e.target === backdrop) this._closeModal();
     });
 
-    const zoneSel = this._root.getElementById("f_zone");
-    zoneSel.onchange = () => this._onZoneChange();
-
-    const saveBtn = this._root.getElementById("saveBtn");
-    saveBtn.onclick = () => this._saveTask();
+    this._root.getElementById("f_zone").onchange = () => this._onZoneChange();
+    this._root.getElementById("saveBtn").onclick = () => this._saveTask();
   }
 
   set hass(hass) {
@@ -204,8 +208,6 @@ class MaintenanceBoardCard extends HTMLElement {
     if (e.key === "Escape" && this._modalOpen) this._closeModal();
   };
 
-  getCardSize() { return 6; }
-
   _scheduleRender(force = false) {
     const now = Date.now();
     if (!force && now - this._lastRender < 200) return;
@@ -214,7 +216,6 @@ class MaintenanceBoardCard extends HTMLElement {
   }
 
   _notify(message) {
-    // best-effort HA toast
     try {
       const ev = new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true });
       this.dispatchEvent(ev);
@@ -271,7 +272,7 @@ class MaintenanceBoardCard extends HTMLElement {
     return String(s || "")
       .trim()
       .toLowerCase()
-      .replace(/[\u2013\u2014]/g, "-") // normalize dashes
+      .replace(/[\u2013\u2014]/g, "-")
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .slice(0, 80);
@@ -308,12 +309,11 @@ class MaintenanceBoardCard extends HTMLElement {
     const zoneNew = this._root.getElementById("f_zone_new");
     zoneSel.innerHTML = "";
 
-    // Option C: dropdown + add new zone
+    // Dropdown + "Add new zone…"
     const allZones = (zones || []).filter(z => z && z !== "Unsorted");
     const unique = Array.from(new Set(allZones)).sort((a,b)=>a.localeCompare(b));
-    const opts = ["House", "Studio", "Carport", "Pumphouse", "Tool Shed", "Property"]
-      .concat(unique)
-      .filter((v, i, arr) => arr.indexOf(v) === i);
+    const base = ["House", "Studio", "ADU", "Carport", "Pumphouse", "Shed", "Property"];
+    const opts = base.concat(unique).filter((v, i, arr) => arr.indexOf(v) === i);
 
     for (const z of opts) {
       const o = document.createElement("option");
@@ -321,14 +321,14 @@ class MaintenanceBoardCard extends HTMLElement {
       o.textContent = z;
       zoneSel.appendChild(o);
     }
-
     const addNew = document.createElement("option");
     addNew.value = "__new__";
     addNew.textContent = "➕ Add new zone…";
     zoneSel.appendChild(addNew);
 
-    // Fill form
+    // Fill form for edit
     const t = this._editing;
+
     this._root.getElementById("f_title").value = t ? (t.title || "") : "";
     this._root.getElementById("f_freq").value = t ? (t.freq_days ?? "") : "";
     this._root.getElementById("f_est").value = t ? (t.est_min ?? "") : "";
@@ -337,7 +337,7 @@ class MaintenanceBoardCard extends HTMLElement {
     const defaultZone = t?.zone || "House";
     if (opts.includes(defaultZone)) zoneSel.value = defaultZone;
     else if (defaultZone && defaultZone !== "Unsorted") {
-      // allow editing unknown zone: insert it
+      // allow editing unknown zone
       const o = document.createElement("option");
       o.value = defaultZone;
       o.textContent = defaultZone;
@@ -350,12 +350,15 @@ class MaintenanceBoardCard extends HTMLElement {
     zoneNew.value = "";
     zoneNew.disabled = true;
 
-    // Errors/Hint
-    this._setModalError("");
-    const hint = this._root.getElementById("idHint");
-    hint.textContent = isEdit ? `ID: ${t.id}` : "ID will be generated automatically (you can edit later).";
+    // Dates (we store ISO; date input wants YYYY-MM-DD)
+    const lastDone = t?.last_done ? String(t.last_done).slice(0, 10) : "";
+    const due = t?.due ? String(t.due).slice(0, 10) : "";
+    this._root.getElementById("f_last_done").value = lastDone;
+    this._root.getElementById("f_due").value = due;
 
-    // focus title
+    this._setModalError("");
+    this._root.getElementById("idHint").textContent = isEdit ? `ID: ${t.id}` : "ID will be generated automatically.";
+
     setTimeout(() => this._root.getElementById("f_title").focus(), 10);
   }
 
@@ -402,44 +405,48 @@ class MaintenanceBoardCard extends HTMLElement {
     const freq_days = freqStr === "" ? 0 : Number(freqStr);
     const est_min = estStr === "" ? 0 : Number(estStr);
 
-    return { title, zone, freq_days, est_min, notes };
+    const last_done_date = this._root.getElementById("f_last_done").value.trim();
+    const due_date = this._root.getElementById("f_due").value.trim();
+
+    // Send ISO datetime at midnight UTC, which HA cv.datetime accepts
+    const last_done = last_done_date ? `${last_done_date}T00:00:00Z` : null;
+    const due = due_date ? `${due_date}T00:00:00Z` : null;
+
+    return { title, zone, freq_days, est_min, notes, last_done, due };
   }
 
   async _saveTask() {
-    const user = this._getUser();
+    const { title, zone, freq_days, est_min, notes, last_done, due } = this._readModalForm();
     const isEdit = !!this._editing;
-    const { title, zone, freq_days, est_min, notes } = this._readModalForm();
 
     if (!title) return this._setModalError("Title is required.");
     if (!zone) return this._setModalError("Zone is required (or enter a new zone).");
     if (!Number.isFinite(freq_days) || freq_days < 0) return this._setModalError("Frequency must be a number (0 or greater).");
     if (!Number.isFinite(est_min) || est_min < 0) return this._setModalError("Estimate must be a number (0 or greater).");
 
+    const payload = {
+      title,
+      zone,
+      freq_days: Math.floor(freq_days),
+      est_min: Math.floor(est_min),
+      notes,
+    };
+    if (last_done) payload.last_done = last_done;
+    if (due) payload.due = due;
+
     if (!isEdit) {
       const task_id = `${this._slugify(zone)}_${this._slugify(title)}` || `task_${Date.now()}`;
-      const ok = await this._call("maintenance", "add_task", {
-        task_id,
-        title,
-        zone,
-        freq_days: Math.floor(freq_days),
-        est_min: Math.floor(est_min),
-        notes,
-      });
+      payload.task_id = task_id;
+
+      const ok = await this._call("maintenance", "add_task", payload);
       if (!ok) return;
       this._notify("Task added.");
       this._closeModal();
       return;
     }
 
-    // Edit existing
-    const ok = await this._call("maintenance", "update_task", {
-      task_id: this._editing.id,
-      title,
-      zone,
-      freq_days: Math.floor(freq_days),
-      est_min: Math.floor(est_min),
-      notes,
-    });
+    payload.task_id = this._editing.id;
+    const ok = await this._call("maintenance", "update_task", payload);
     if (!ok) return;
     this._notify("Task updated.");
     this._closeModal();
@@ -471,7 +478,7 @@ class MaintenanceBoardCard extends HTMLElement {
   _render() {
     if (!this._hass || !this._config) return;
 
-    const { st, tasks, zones } = this._getTasksState();
+    const { st, tasks } = this._getTasksState();
     const countEl = this._root.getElementById("count");
     const filterEl = this._root.getElementById("filter");
     const listEl = this._root.getElementById("list");
@@ -549,7 +556,6 @@ class MaintenanceBoardCard extends HTMLElement {
 
     listEl.innerHTML = html;
 
-    // Wire buttons
     const byId = new Map(tasks.map(t => [t.id, t]));
 
     listEl.querySelectorAll("button[data-sp]").forEach(btn => {
