@@ -50,12 +50,13 @@ UPDATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("est_min"): vol.Coerce(int),
         vol.Optional("notes"): cv.string,
         vol.Optional("last_done"): cv.datetime,
+        vol.Optional("user"): cv.string,
     },
     extra=vol.PREVENT_EXTRA,
 )
 
 DELETE_TASK_SCHEMA = vol.Schema(
-    {vol.Required("task_id"): cv.string},
+    {vol.Required("task_id"): cv.string, vol.Optional("user"): cv.string},
     extra=vol.PREVENT_EXTRA,
 )
 
@@ -87,6 +88,15 @@ COMPLETE_SCHEMA = vol.Schema(
 
 
 async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
+    def _elapsed_seconds(started_at: datetime | None, now: datetime) -> int:
+        """Calculate elapsed seconds between now and a (possibly naive) start time."""
+
+        started = _ensure_aware(started_at)
+        if started is None:
+            return 0
+
+        return max(0, int((now - started).total_seconds()))
+
     async def handle_add_task(call: ServiceCall) -> None:
         data = ADD_TASK_SCHEMA(dict(call.data))
 
@@ -127,10 +137,14 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_update_task(call: ServiceCall) -> None:
         data = UPDATE_TASK_SCHEMA(dict(call.data))
         task_id = data["task_id"]
+        user = data.get("user")
 
         t = db.get(task_id)
         if not t:
             raise HomeAssistantError(f"Unknown task: {task_id}")
+
+        if t.locked_by is not None and t.locked_by != user:
+            raise HomeAssistantError(f"Task is locked by {t.locked_by}")
 
         # Apply updates
         if "title" in data:
@@ -156,9 +170,14 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
     async def handle_delete_task(call: ServiceCall) -> None:
         data = DELETE_TASK_SCHEMA(dict(call.data))
         task_id = data["task_id"]
+        user = data.get("user")
 
         if not db.get(task_id):
             raise HomeAssistantError(f"Unknown task: {task_id}")
+
+        t = db.get(task_id)
+        if t and t.locked_by is not None and t.locked_by != user:
+            raise HomeAssistantError(f"Task is locked by {t.locked_by}")
 
         db.delete(task_id)
         await db.async_save()
@@ -177,13 +196,18 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         if t.locked_by is not None and t.locked_by != user:
             raise HomeAssistantError(f"Task is locked by {t.locked_by}")
 
-        # If already running, ignore
-        if t.status == "running" and t.started_at:
-            return
+        now = utcnow()
 
-        t.locked_by = user
-        t.status = "running"
-        t.started_at = utcnow()
+        # If unlocked, take the lock; if already locked, it must be this user
+        if t.locked_by is None:
+            t.locked_by = user
+
+        # Already running: keep prior start to preserve elapsed time
+        if t.status == "running" and t.started_at:
+            t.started_at = _ensure_aware(t.started_at)
+        else:
+            t.status = "running"
+            t.started_at = now
 
         db.upsert(t)
         await db.async_save()
@@ -198,21 +222,11 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         if not t:
             raise HomeAssistantError(f"Unknown task: {task_id}")
 
-        if t.locked_by is not None and t.locked_by != user:
+        if t.locked_by is None or t.locked_by != user:
             raise HomeAssistantError(f"Task is locked by {t.locked_by}")
 
-        if t.status != "running" or not t.started_at:
-            # nothing to pause
-            t.status = "paused" if t.locked_by == user else (t.status or "idle")
-            db.upsert(t)
-            await db.async_save()
-            await db.notify()
-            return
-
         now = utcnow()
-        elapsed = int((now - t.started_at).total_seconds())
-        if elapsed < 0:
-            elapsed = 0
+        elapsed = _elapsed_seconds(t.started_at, now)
 
         t.accum_sec = int(t.accum_sec or 0) + elapsed
         t.started_at = None
@@ -240,10 +254,9 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
 
         # If running, fold running time into accum before completing
         if t.status == "running" and t.started_at:
-            elapsed = int((now - t.started_at).total_seconds())
-            if elapsed < 0:
-                elapsed = 0
+            elapsed = _elapsed_seconds(t.started_at, now)
             t.accum_sec = int(t.accum_sec or 0) + elapsed
+            t.started_at = None
 
         # Determine minutes spent for stats
         spent_min = None
