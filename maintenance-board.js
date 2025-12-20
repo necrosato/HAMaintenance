@@ -246,24 +246,9 @@ class MaintenanceBoardCard extends HTMLElement {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return "";
-    const tz = this._hass?.config?.time_zone;
-    if (tz) {
-      const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone: tz,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).formatToParts(d);
-
-      const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
-      if (lookup.year && lookup.month && lookup.day) {
-        return `${lookup.year}-${lookup.month}-${lookup.day}`;
-      }
-    }
-
-    const y = d.getFullYear();
-    const m = `${d.getMonth() + 1}`.padStart(2, "0");
-    const day = `${d.getDate()}`.padStart(2, "0");
+    const y = d.getUTCFullYear();
+    const m = `${d.getUTCMonth() + 1}`.padStart(2, "0");
+    const day = `${d.getUTCDate()}`.padStart(2, "0");
     return `${y}-${m}-${day}`;
   }
 
