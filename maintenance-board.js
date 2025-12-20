@@ -43,6 +43,7 @@ class MaintenanceBoardCard extends HTMLElement {
           }
           button:disabled { opacity:.45; cursor:not-allowed; }
           .danger { border-color: var(--error-color); }
+          .warn-pill { border-color: var(--warning-color, orange); }
           .ok { border-color: var(--success-color); }
           .small { font-size: 11px; opacity: .75; margin-top: 4px; }
           .note { font-size: 12px; opacity:.85; white-space: pre-wrap; margin-top: 6px; }
@@ -245,6 +246,21 @@ class MaintenanceBoardCard extends HTMLElement {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return "";
+    const tz = this._hass?.config?.time_zone;
+    if (tz) {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(d);
+
+      const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+      if (lookup.year && lookup.month && lookup.day) {
+        return `${lookup.year}-${lookup.month}-${lookup.day}`;
+      }
+    }
+
     const y = d.getFullYear();
     const m = `${d.getMonth() + 1}`.padStart(2, "0");
     const day = `${d.getDate()}`.padStart(2, "0");
@@ -423,8 +439,14 @@ class MaintenanceBoardCard extends HTMLElement {
 
     const last_done_date = this._root.getElementById("f_last_done").value.trim();
 
-    // Send ISO datetime at midnight UTC, which HA cv.datetime accepts
-    const last_done = last_done_date ? `${last_done_date}T00:00:00Z` : null;
+    // Send ISO datetime at local midnight so backend can align to user's day boundary
+    let last_done = null;
+    if (last_done_date) {
+      const localMidnight = new Date(`${last_done_date}T00:00:00`);
+      if (!Number.isNaN(localMidnight.getTime())) {
+        last_done = localMidnight.toISOString();
+      }
+    }
 
     return { title, zone, freq_days, est_min, notes, last_done };
   }
@@ -571,7 +593,11 @@ class MaintenanceBoardCard extends HTMLElement {
         : (lastDoneBy ? `Last done: ${lastDone} by ${lastDoneBy}` : `Last done: ${lastDone}`);
       const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
 
-      const borderClass = (daysLeft !== null && daysLeft !== undefined && daysLeft < 0) ? "danger" : "ok";
+      let borderClass = "ok";
+      if (daysLeft !== null && daysLeft !== undefined) {
+        if (daysLeft <= 0) borderClass = "danger";
+        else if (daysLeft <= 2) borderClass = "warn-pill";
+      }
       const statusTxt = (status === "idle") ? "idle" : `${status}: ${locked || "unknown"}`;
       const est = t.est_min ? `${t.est_min}m est` : "";
       const hasAvg = t.avg_min !== undefined && t.avg_min !== null;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -20,8 +21,12 @@ def _days_left(due: datetime | None) -> int | None:
         return None
     now = utcnow()
     delta = due - now
-    # floor to whole days (overdue becomes negative)
-    return int(delta.total_seconds() // 86400)
+    total_seconds = delta.total_seconds()
+
+    # Round toward zero for overdue tasks, but avoid early "0d" for upcoming tasks.
+    if total_seconds >= 0:
+        return int(math.ceil(total_seconds / 86400))
+    return -int(math.ceil(abs(total_seconds) / 86400))
 
 
 def _sort_key(task: Any):

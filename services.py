@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 import uuid
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .storage import MaintenanceDB, Task, utcnow
@@ -21,12 +22,22 @@ def _ensure_aware(dt: datetime | None) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
-def _compute_due(last_done: datetime | None, freq_days: int) -> datetime | None:
+def _compute_due(
+    last_done: datetime | None, freq_days: int, *, tzinfo: timezone | None
+) -> datetime | None:
+    """Return due at midnight in the given timezone, converted to UTC."""
+
     if last_done is None:
         return None
     if freq_days <= 0:
         return None
-    return last_done + timedelta(days=int(freq_days))
+
+    base = _ensure_aware(last_done)
+    target_tz = tzinfo or timezone.utc
+    base_local = base.astimezone(target_tz)
+    due_date = base_local.date() + timedelta(days=int(freq_days))
+    due_local = datetime.combine(due_date, time.min, tzinfo=target_tz)
+    return due_local.astimezone(timezone.utc)
 
 
 ADD_TASK_SCHEMA = vol.Schema(
@@ -86,6 +97,8 @@ RESET_SCHEMA = vol.Schema(
 
 
 async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
+    target_tz = dt_util.get_time_zone(hass.config.time_zone) or dt_util.DEFAULT_TIME_ZONE
+
     def _norm(s: str) -> str:
         return " ".join(str(s or "").strip().split()).lower()
 
@@ -144,7 +157,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         est_min = int(data.get("est_min", 0))
 
         last_done = _ensure_aware(data.get("last_done"))
-        due = _compute_due(last_done, freq_days)
+        due = _compute_due(last_done, freq_days, tzinfo=target_tz)
 
         t = Task(
             id=task_id,
@@ -205,7 +218,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
             t.last_done = _ensure_aware(data.get("last_done"))
             t.last_done_by = user
 
-        t.due = _compute_due(t.last_done, int(t.freq_days or 0))
+        t.due = _compute_due(t.last_done, int(t.freq_days or 0), tzinfo=target_tz)
 
         db.upsert(t)
         await db.async_save()
@@ -324,10 +337,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         # Completion sets last_done and reschedules due from completion time (your requirement)
         t.last_done = now
         t.last_done_by = user
-        if int(t.freq_days or 0) > 0:
-            t.due = now + timedelta(days=int(t.freq_days))
-        else:
-            t.due = None
+        t.due = _compute_due(now, int(t.freq_days or 0), tzinfo=target_tz)
 
         # Clear runtime state
         t.locked_by = None
@@ -357,7 +367,7 @@ async def async_setup_services(hass: HomeAssistant, db: MaintenanceDB) -> None:
         t.started_at = None
         t.status = "idle"
         t.locked_by = None
-        t.due = _compute_due(t.last_done, int(t.freq_days or 0))
+        t.due = _compute_due(t.last_done, int(t.freq_days or 0), tzinfo=target_tz)
 
         db.upsert(t)
         await db.async_save()
