@@ -424,8 +424,14 @@ class MaintenanceBoardCard extends HTMLElement {
 
     const last_done_date = this._root.getElementById("f_last_done").value.trim();
 
-    // Send ISO datetime at midnight UTC, which HA cv.datetime accepts
-    const last_done = last_done_date ? `${last_done_date}T00:00:00Z` : null;
+    // Send ISO datetime at local midnight so backend can align to user's day boundary
+    let last_done = null;
+    if (last_done_date) {
+      const localMidnight = new Date(`${last_done_date}T00:00:00`);
+      if (!Number.isNaN(localMidnight.getTime())) {
+        last_done = localMidnight.toISOString();
+      }
+    }
 
     return { title, zone, freq_days, est_min, notes, last_done };
   }
