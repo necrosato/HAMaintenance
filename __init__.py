@@ -99,12 +99,9 @@ async def _register_panel(hass: HomeAssistant) -> None:
     module_url = f"{STATIC_URL_PATH}/maintenance-panel.js"
     panel_config = {
         **DEFAULT_PANEL_CONFIG,
-        "_panel_custom": {
-            "name": PANEL_ELEMENT,
-            "embed_iframe": True,
-            "trust_external": False,
-            "module_url": module_url,
-        },
+        "module_url": module_url,
+        "embed_iframe": True,
+        "trust_external": False,
     }
 
     frontend.async_register_built_in_panel(
