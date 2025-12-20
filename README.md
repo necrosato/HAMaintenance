@@ -19,7 +19,6 @@ This is intended to be usable by non–Home Assistant power users.
 - Home Assistant Core 2025.x (tested on Container install)
 - Access to `/config`
 - Ability to restart Home Assistant
-- A Lovelace dashboard
 
 ---
 
@@ -34,7 +33,7 @@ cd /config/custom_components
 git clone <YOUR_REPO_URL> maintenance
 ````
 
-Resulting structure:
+Resulting structure (files are served directly by the integration; no `/config/www` steps needed):
 
 ```
 /config/custom_components/maintenance/
@@ -46,36 +45,10 @@ Resulting structure:
   sensor.py
   www/
     maintenance-board.js
+    maintenance-panel.js
 ```
 
----
-
-## Expose the dashboard UI (symlink into `/config/www`)
-
-Home Assistant serves files in `/config/www` under `/local/`.
-
-Lovelace custom cards must be loaded from `/local/`.
-
-### 2. Create a symbolic link
-
-```bash
-mkdir -p /config/www
-ln -sf /config/custom_components/maintenance/www/maintenance-board.js /config/www/maintenance-board.js
-```
-
-Verify it works by opening:
-
-```
-http://<home-assistant-host>:8123/local/maintenance-board.js
-```
-
-You should see JavaScript source code, not a 404.
-
-If your environment does not support symlinks, copy instead:
-
-```bash
-cp /config/custom_components/maintenance/www/maintenance-board.js /config/www/maintenance-board.js
-```
+The integration serves `/api/maintenance/static/maintenance-board.js` and registers a sidebar panel automatically.
 
 ---
 
@@ -98,40 +71,15 @@ After setup, you should see:
 
 * A sensor exposing tasks (for example: `sensor.maintenance_tasks`)
 * Services under the `maintenance.*` domain
+* A **Maintenance** item in the sidebar that opens the dashboard UI with no extra configuration
 
 ---
 
-## Add the Lovelace Resource
+## Panel usage
 
-1. Settings → Dashboards → Resources
-2. Add Resource
-3. URL: `/local/maintenance-board.js`
-4. Resource type: JavaScript Module
-5. Save
-6. Hard refresh your browser (Ctrl+Shift+R)
+Click **Maintenance** in the sidebar to open the UI. The integration attempts to auto-discover the tasks sensor and optional user select entity; if it cannot find a tasks sensor it will show a friendly message instead of breaking the page.
 
----
-
-## Create the Dashboard View
-
-Edit your dashboard and open the Raw Configuration Editor.
-
-Add a view like this:
-
-```yaml
-views:
-  - title: Maintenance
-    icon: mdi:tools
-    panel: true
-    cards:
-      - type: custom:maintenance-board
-        entity: sensor.maintenance_tasks
-```
-
-Notes:
-
-* Replace `sensor.maintenance_tasks` if your sensor name differs.
-* The board automatically uses the logged-in Home Assistant user for locks and history.
+Development tip: the static files are served with caching disabled, but browsers may still cache aggressively. If you update `maintenance-board.js` or `maintenance-panel.js`, perform a hard refresh (Ctrl+Shift+R or ⌘+Shift+R) to reload the latest code.
 
 ---
 
@@ -188,14 +136,11 @@ If Last Done is set and Due Date is left blank, Due Date is calculated automatic
 
 ### “Custom element not found: maintenance-board”
 
-The JavaScript card is not loaded.
+The JavaScript module did not load. Check:
 
-Check:
-
-1. `/config/www/maintenance-board.js` exists (or symlink exists)
-2. `http://<ha>/local/maintenance-board.js` loads
-3. Resource is added as JavaScript Module
-4. Hard refresh browser
+1. Visit `https://<ha-host>/api/maintenance/static/maintenance-board.js` (you should see source, not a 404).
+2. Verify the **Maintenance** sidebar item appears (if not, restart Home Assistant).
+3. Hard refresh your browser.
 
 ---
 
@@ -211,23 +156,12 @@ Check:
 
 ---
 
-### 404 at `/local/maintenance-board.js`
-
-The symlink or copy is incorrect.
-
-Fix:
-
-```bash
-ln -sf /config/custom_components/maintenance/www/maintenance-board.js /config/www/maintenance-board.js
-```
-
----
-
 ## Development Notes
 
 * Backend code: `custom_components/maintenance/`
 * Dashboard UI: `custom_components/maintenance/www/maintenance-board.js`
-* Lovelace loads the UI from `/config/www` via `/local/`
+* Sidebar panel wrapper: `custom_components/maintenance/www/maintenance-panel.js`
+* Static assets are served from `/api/maintenance/static/`
 
 Typical dev loop:
 
@@ -240,5 +174,3 @@ Typical dev loop:
 
 This integration is under active development.
 APIs and UI are expected to evolve, but data storage is forward-compatible.
-
-```
