@@ -43,6 +43,7 @@ class MaintenanceBoardCard extends HTMLElement {
           }
           button:disabled { opacity:.45; cursor:not-allowed; }
           .danger { border-color: var(--error-color); }
+          .warn-pill { border-color: var(--warning-color, orange); }
           .ok { border-color: var(--success-color); }
           .small { font-size: 11px; opacity: .75; margin-top: 4px; }
           .note { font-size: 12px; opacity:.85; white-space: pre-wrap; margin-top: 6px; }
@@ -245,9 +246,9 @@ class MaintenanceBoardCard extends HTMLElement {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return "";
-    const y = d.getFullYear();
-    const m = `${d.getMonth() + 1}`.padStart(2, "0");
-    const day = `${d.getDate()}`.padStart(2, "0");
+    const y = d.getUTCFullYear();
+    const m = `${d.getUTCMonth() + 1}`.padStart(2, "0");
+    const day = `${d.getUTCDate()}`.padStart(2, "0");
     return `${y}-${m}-${day}`;
   }
 
@@ -571,7 +572,11 @@ class MaintenanceBoardCard extends HTMLElement {
         : (lastDoneBy ? `Last done: ${lastDone} by ${lastDoneBy}` : `Last done: ${lastDone}`);
       const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
 
-      const borderClass = (daysLeft !== null && daysLeft !== undefined && daysLeft < 0) ? "danger" : "ok";
+      let borderClass = "ok";
+      if (daysLeft !== null && daysLeft !== undefined) {
+        if (daysLeft <= 0) borderClass = "danger";
+        else if (daysLeft <= 2) borderClass = "warn-pill";
+      }
       const statusTxt = (status === "idle") ? "idle" : `${status}: ${locked || "unknown"}`;
       const est = t.est_min ? `${t.est_min}m est` : "";
       const hasAvg = t.avg_min !== undefined && t.avg_min !== null;
