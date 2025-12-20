@@ -104,7 +104,7 @@ async def _register_panel(hass: HomeAssistant) -> None:
         "trust_external": False,
     }
 
-    await frontend.async_register_built_in_panel(
+    frontend.async_register_built_in_panel(
         hass,
         component_name="custom",
         sidebar_title="Maintenance",
