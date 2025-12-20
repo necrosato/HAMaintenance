@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from homeassistant.components import frontend
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -34,7 +35,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
-    _register_static_assets(hass)
+    await _register_static_assets(hass)
     await _register_panel(hass)
 
     # Create DB once per entry
@@ -73,7 +74,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-def _register_static_assets(hass: HomeAssistant) -> None:
+async def _register_static_assets(hass: HomeAssistant) -> None:
     """Expose frontend assets under /api/maintenance/static."""
 
     if hass.data[DOMAIN].get("static_registered"):
@@ -83,10 +84,8 @@ def _register_static_assets(hass: HomeAssistant) -> None:
         _LOGGER.warning("Maintenance frontend directory missing: %s", WWW_DIR)
         return
 
-    hass.http.register_static_path(
-        STATIC_URL_PATH,
-        str(WWW_DIR),
-        cache_headers=False,
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(STATIC_URL_PATH, str(WWW_DIR), False)]
     )
     hass.data[DOMAIN]["static_registered"] = True
 
