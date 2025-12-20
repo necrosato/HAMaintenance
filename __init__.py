@@ -97,6 +97,12 @@ async def _register_panel(hass: HomeAssistant) -> None:
         return
 
     module_url = f"{STATIC_URL_PATH}/maintenance-panel.js"
+    panel_config = {
+        **DEFAULT_PANEL_CONFIG,
+        "module_url": module_url,
+        "embed_iframe": True,
+        "trust_external": False,
+    }
 
     await frontend.async_register_built_in_panel(
         hass,
@@ -104,9 +110,8 @@ async def _register_panel(hass: HomeAssistant) -> None:
         sidebar_title="Maintenance",
         sidebar_icon="mdi:tools",
         frontend_url_path=PANEL_URL_PATH,
-        config=DEFAULT_PANEL_CONFIG,
+        config=panel_config,
         require_admin=False,
-        module_url=module_url,
     )
 
     hass.data[DOMAIN]["panel_registered"] = True
