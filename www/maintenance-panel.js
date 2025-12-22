@@ -27,30 +27,41 @@ class MaintenancePanel extends HTMLElement {
       <style>
         :host {
           display: block;
+          height: 100%;
+          background: var(--lovelace-background, var(--primary-background-color));
         }
-        .page {
+        .root {
+          min-height: 100vh;
+          background: var(--lovelace-background, var(--primary-background-color));
+        }
+        .container {
+          padding: 16px;
+          max-width: 1100px;
           margin: 0 auto;
-          padding: 16px;
           box-sizing: border-box;
-          max-width: 1400px;
         }
-        .empty {
+        .empty-card {
+          display: block;
+        }
+        .empty-content {
           padding: 16px;
-          border-radius: 12px;
-          background: var(--card-background-color);
           color: var(--primary-text-color);
-          border: 1px solid var(--divider-color);
-          box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,0.15));
         }
       </style>
-      <div class="page">
-        <maintenance-board style="display:none;"></maintenance-board>
-        <div id="empty" class="empty" hidden>No Maintenance tasks sensor found. Add the integration first, then reload.</div>
+      <div class="root">
+        <div class="container">
+          <maintenance-board style="display:none;"></maintenance-board>
+          <ha-card id="empty-card" class="empty-card" hidden>
+            <div class="empty-content">
+              No Maintenance tasks sensor found. Add the integration first, then reload.
+            </div>
+          </ha-card>
+        </div>
       </div>
     `;
 
     this._board = this.shadowRoot.querySelector("maintenance-board");
-    this._empty = this.shadowRoot.getElementById("empty");
+    this._emptyCard = this.shadowRoot.getElementById("empty-card");
     this._applyConfig();
   }
 
@@ -117,14 +128,14 @@ class MaintenancePanel extends HTMLElement {
   }
 
   _showMissing() {
-    if (!this._empty) return;
-    this._empty.hidden = false;
+    if (!this._emptyCard) return;
+    this._emptyCard.hidden = false;
     if (this._board) this._board.style.display = "none";
   }
 
   _hideMissing() {
-    if (!this._empty) return;
-    this._empty.hidden = true;
+    if (!this._emptyCard) return;
+    this._emptyCard.hidden = true;
     if (this._board) this._board.style.display = "block";
   }
 }
