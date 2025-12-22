@@ -29,6 +29,7 @@ class MaintenancePanel extends HTMLElement {
           display: block;
           height: 100%;
           background: var(--lovelace-background, var(--primary-background-color));
+          color: var(--primary-text-color);
         }
         .root {
           min-height: 100vh;

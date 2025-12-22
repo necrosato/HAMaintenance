@@ -12,179 +12,267 @@ class MaintenanceBoardCard extends HTMLElement {
       this._root = this.attachShadow({ mode: "open" });
       this._root.innerHTML = `
         <style>
-          :host { display:block; }
-          .card { padding: 12px; }
-          .top { display:flex; gap:8px; align-items:center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
-          .leftTop { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
-          .pill { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--divider-color); font-size: 12px; }
-          .row { display:flex; flex-direction:column; gap:8px; padding: 10px 0; border-top: 1px solid var(--divider-color); }
-          .row:first-of-type { border-top: none; }
-          .head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
-          .title { font-weight: 600; line-height: 1.2; }
-          .meta { font-size: 12px; opacity: .88; display:flex; gap:8px; flex-wrap: wrap; margin-top: 4px; }
-          .right { text-align:right; font-size: 12px; opacity: .9; min-width: 110px; }
-          .btns { display:flex; gap:8px; }
-          .icons { display:flex; gap:8px; justify-content:flex-end; margin-top: 6px; }
-          button {
-            border: 1px solid var(--divider-color);
-            background: var(--card-background-color);
+          :host {
+            display: block;
             color: var(--primary-text-color);
-            border-radius: 12px;
-            padding: 10px 10px;
-            font-size: 13px;
-            cursor: pointer;
-            flex: 1;
           }
-          button.smallBtn {
-            flex: 0 0 auto;
-            padding: 8px 10px;
+          .board {
+            display: block;
+          }
+          .board-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+          }
+          .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+          .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 8px;
+            border-radius: 999px;
             font-size: 12px;
-            border-radius: 10px;
-          }
-          button:disabled { opacity:.45; cursor:not-allowed; }
-          .danger { border-color: var(--error-color); }
-          .warn-pill { border-color: var(--warning-color, orange); }
-          .ok { border-color: var(--success-color); }
-          .small { font-size: 11px; opacity: .75; margin-top: 4px; }
-          .note { font-size: 12px; opacity:.85; white-space: pre-wrap; margin-top: 6px; }
-
-          /* Modal */
-          .backdrop {
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,.35);
-            display: none;
-            align-items: center; justify-content: center;
-            z-index: 9999;
-          }
-          .backdrop.open { display: flex; }
-          .modal {
-            width: min(560px, calc(100vw - 24px));
-            max-height: calc(100vh - 24px);
-            overflow: auto;
-            background: var(--card-background-color);
+            background: var(--chip-background-color, rgba(127,127,127,0.15));
             color: var(--primary-text-color);
             border: 1px solid var(--divider-color);
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,.35);
-            padding: 14px;
+            white-space: nowrap;
           }
-          .modalHeader { display:flex; justify-content: space-between; align-items:center; gap:10px; margin-bottom: 8px; }
-          .modalTitle { font-weight: 700; }
-          .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-          .grid1 { display:grid; grid-template-columns: 1fr; gap: 10px; }
-          label { font-size: 12px; opacity: .9; display:block; margin-bottom: 4px; }
-          input, textarea, select {
+          .chip.overdue {
+            color: var(--error-color);
+            border-color: var(--error-color);
+          }
+          .chip.running {
+            color: var(--success-color);
+            border-color: var(--success-color);
+          }
+          .chip.soft {
+            opacity: 0.85;
+          }
+          .task-card {
+            background: var(--card-background-color, var(--ha-card-background, var(--primary-background-color)));
+            border-radius: var(--ha-card-border-radius, 12px);
+            box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.08));
+            border: 1px solid var(--divider-color);
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+          }
+          .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+          }
+          .task-title {
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 6px;
+            word-break: break-word;
+          }
+          .task-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+          }
+          .task-note {
+            font-size: 13px;
+            line-height: 1.4;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            white-space: pre-wrap;
+          }
+          .task-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+          }
+          .duration-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 140px;
+          }
+          .duration {
+            font-weight: 700;
+            font-size: 15px;
+          }
+          .meta-text {
+            font-size: 12px;
+            opacity: 0.85;
+          }
+          .task-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+          }
+          .inline-actions {
+            display: flex;
+            gap: 6px;
+          }
+          mwc-button[disabled] {
+            opacity: 0.5;
+            pointer-events: none;
+          }
+          mwc-button.primary-btn {
+            --mdc-theme-primary: var(--primary-color);
+          }
+          mwc-button.danger-btn {
+            --mdc-theme-primary: var(--error-color);
+          }
+          ha-icon-button {
+            --mdc-icon-size: 20px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid var(--divider-color);
+          }
+          .empty-state {
+            text-align: center;
+            color: var(--secondary-text-color);
+            padding: 16px;
+          }
+          .dialog-content {
+            padding: 0 8px 8px;
+            box-sizing: border-box;
+            color: var(--primary-text-color);
+          }
+          .dialog-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+          .dialog-grid.single {
+            grid-template-columns: 1fr;
+          }
+          .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+          .field-label {
+            font-size: 12px;
+            opacity: 0.9;
+          }
+          .text-input,
+          select,
+          textarea {
             width: 100%;
             box-sizing: border-box;
             border: 1px solid var(--divider-color);
-            background: var(--card-background-color);
+            background: var(--card-background-color, var(--primary-background-color));
             color: var(--primary-text-color);
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 10px;
             font-size: 14px;
             outline: none;
           }
-          textarea { min-height: 80px; resize: vertical; }
-          .modalActions { display:flex; gap:10px; margin-top: 12px; }
-          .modalActions button { flex: 1; }
-          .ghost { opacity:.9; }
-          .hint { font-size: 12px; opacity: .75; margin-top: 6px; }
-          .warn { color: var(--error-color); font-size: 12px; margin-top: 6px; }
+          textarea {
+            resize: vertical;
+            min-height: 80px;
+          }
+          ha-dialog {
+            --dialog-surface-position: relative;
+            --dialog-content-padding: 0;
+            --dialog-background-color: var(--card-background-color, var(--primary-background-color));
+            --dialog-surface-color: var(--primary-text-color);
+            --dialog-title-font-weight: 700;
+          }
+          .error-text {
+            color: var(--error-color);
+            font-size: 12px;
+            margin-top: 6px;
+          }
+          @media (max-width: 640px) {
+            .task-header { flex-direction: column; align-items: flex-start; }
+            .task-footer { flex-direction: column; align-items: flex-start; }
+            .duration-block { width: 100%; }
+            .task-actions { width: 100%; justify-content: flex-start; }
+          }
         </style>
 
-        <ha-card>
-          <div class="card">
-            <div class="top">
-              <div class="leftTop">
-                <div class="pill" id="count"></div>
-                <div class="pill" id="filter"></div>
-              </div>
-              <div class="leftTop">
-                <button class="smallBtn" id="addBtn">➕ Add Task</button>
-              </div>
+        <div class="board">
+          <div class="board-header">
+            <div class="header-meta">
+              <span class="chip soft" id="count"></span>
+              <span class="chip soft" id="filter"></span>
             </div>
-
-            <div id="list"></div>
+            <mwc-button raised dense id="addBtn">➕ Add Task</mwc-button>
           </div>
-        </ha-card>
+          <div id="list"></div>
+        </div>
 
-        <div class="backdrop" id="backdrop" role="dialog" aria-modal="true">
-          <div class="modal">
-            <div class="modalHeader">
-              <div class="modalTitle" id="modalTitle">Add Task</div>
-              <button class="smallBtn" id="closeModal">✕</button>
-            </div>
-
-            <div class="grid1">
-              <div>
-                <label>Title</label>
-                <input id="f_title" placeholder="e.g. Mini-split – Clean filters" />
+        <ha-dialog id="taskDialog" scrimClickAction="close" escapeKeyAction="close">
+          <div slot="heading" id="modalTitle">Add Task</div>
+          <div class="dialog-content">
+            <div class="dialog-grid single">
+              <div class="field-group">
+                <span class="field-label">Title</span>
+                <ha-textfield id="f_title" class="text-input" placeholder="e.g. Mini-split – Clean filters"></ha-textfield>
               </div>
             </div>
 
-            <div class="grid">
-              <div>
-                <label>Zone</label>
-                <select id="f_zone"></select>
-                <div class="hint">Pick a zone, or choose “Add new zone…”</div>
+            <div class="dialog-grid">
+              <div class="field-group">
+                <span class="field-label">Zone</span>
+                <select id="f_zone" class="text-input"></select>
+                <ha-textfield id="f_zone_new" class="text-input" placeholder="New zone" disabled></ha-textfield>
               </div>
-
-              <div>
-                <label>New zone (only if adding)</label>
-                <input id="f_zone_new" placeholder="e.g. Studio" disabled />
-              </div>
-            </div>
-
-            <div class="grid">
-              <div>
-                <label>Frequency (days)</label>
-                <input id="f_freq" type="number" min="0" step="1" placeholder="e.g. 30" />
-              </div>
-              <div>
-                <label>Estimate (minutes)</label>
-                <input id="f_est" type="number" min="0" step="1" placeholder="e.g. 15" />
-              </div>
-            </div>
-
-            <div class="grid1">
-              <div>
-                <label>Last done (date)</label>
-                <input id="f_last_done" type="date" />
-                <div class="hint">Due auto-calculates from Last done + Frequency.</div>
-              </div>
-            </div>
-
-            <div class="grid1">
-              <div>
-                <label>Notes</label>
+              <div class="field-group">
+                <span class="field-label">Notes</span>
                 <textarea id="f_notes" placeholder="Optional notes…"></textarea>
               </div>
             </div>
 
-            <div class="warn" id="modalError" style="display:none;"></div>
-
-            <div class="modalActions">
-              <button class="ghost" id="cancelBtn">Cancel</button>
-              <button class="ok" id="saveBtn">Save</button>
+            <div class="dialog-grid">
+              <div class="field-group">
+                <span class="field-label">Frequency (days)</span>
+                <ha-textfield id="f_freq" class="text-input" type="number" min="0" step="1" placeholder="e.g. 30"></ha-textfield>
+              </div>
+              <div class="field-group">
+                <span class="field-label">Estimate (minutes)</span>
+                <ha-textfield id="f_est" class="text-input" type="number" min="0" step="1" placeholder="e.g. 15"></ha-textfield>
+              </div>
             </div>
 
+            <div class="dialog-grid single">
+              <div class="field-group">
+                <span class="field-label">Last done (date)</span>
+                <ha-textfield id="f_last_done" class="text-input" type="date"></ha-textfield>
+                <div class="meta-text">Due auto-calculates from Last done + Frequency.</div>
+              </div>
+            </div>
+
+            <div class="error-text" id="modalError" style="display:none;"></div>
           </div>
-        </div>
+          <mwc-button slot="secondaryAction" dialogAction="cancel" id="cancelBtn">Cancel</mwc-button>
+          <mwc-button slot="primaryAction" id="saveBtn" class="primary-btn">Save</mwc-button>
+        </ha-dialog>
       `;
     }
 
     // One-time wiring
     this._root.getElementById("addBtn").onclick = () => this._openAdd();
-    this._root.getElementById("closeModal").onclick = () => this._closeModal();
     this._root.getElementById("cancelBtn").onclick = () => this._closeModal();
-
-    const backdrop = this._root.getElementById("backdrop");
-    backdrop.addEventListener("click", (e) => {
-      if (e.target === backdrop) this._closeModal();
-    });
-
-    this._root.getElementById("f_zone").onchange = () => this._onZoneChange();
     this._root.getElementById("saveBtn").onclick = () => this._saveTask();
+    this._root.getElementById("f_zone").onchange = () => this._onZoneChange();
+    this._dialog = this._root.getElementById("taskDialog");
+    this._dialog.addEventListener("closed", () => {
+      this._modalOpen = false;
+      this._editing = null;
+      this._setModalError("");
+    });
   }
 
   set hass(hass) {
@@ -323,16 +411,16 @@ class MaintenanceBoardCard extends HTMLElement {
     const isEdit = !!this._editing;
 
     this._modalOpen = true;
-    this._root.getElementById("backdrop").classList.add("open");
+    const dialog = this._dialog;
+    dialog.open = true;
     this._root.getElementById("modalTitle").textContent = isEdit ? "Edit Task" : "Add Task";
 
     const zoneSel = this._root.getElementById("f_zone");
     const zoneNew = this._root.getElementById("f_zone_new");
     zoneSel.innerHTML = "";
 
-    // Dropdown + "Add new zone…"
-    const allZones = (zones || []).filter(z => z && z !== "Unsorted");
-    const unique = Array.from(new Set(allZones)).sort((a,b)=>a.localeCompare(b));
+    const allZones = (zones || []).filter((z) => z && z !== "Unsorted");
+    const unique = Array.from(new Set(allZones)).sort((a, b) => a.localeCompare(b));
     const base = ["House", "Studio", "ADU", "Carport", "Pumphouse", "Shed", "Property"];
     const opts = base.concat(unique).filter((v, i, arr) => arr.indexOf(v) === i);
 
@@ -347,7 +435,6 @@ class MaintenanceBoardCard extends HTMLElement {
     addNew.textContent = "➕ Add new zone…";
     zoneSel.appendChild(addNew);
 
-    // Fill form for edit
     const t = this._editing;
 
     this._root.getElementById("f_title").value = t ? (t.title || "") : "";
@@ -358,7 +445,6 @@ class MaintenanceBoardCard extends HTMLElement {
     const defaultZone = t?.zone || "House";
     if (opts.includes(defaultZone)) zoneSel.value = defaultZone;
     else if (defaultZone && defaultZone !== "Unsorted") {
-      // allow editing unknown zone
       const o = document.createElement("option");
       o.value = defaultZone;
       o.textContent = defaultZone;
@@ -371,7 +457,6 @@ class MaintenanceBoardCard extends HTMLElement {
     zoneNew.value = "";
     zoneNew.disabled = true;
 
-    // Dates (we store ISO; date input wants YYYY-MM-DD)
     const lastDone = t?.last_done ? String(t.last_done).slice(0, 10) : "";
     this._root.getElementById("f_last_done").value = lastDone;
 
@@ -381,7 +466,11 @@ class MaintenanceBoardCard extends HTMLElement {
 
   _closeModal() {
     this._modalOpen = false;
-    this._root.getElementById("backdrop").classList.remove("open");
+    const dialog = this._dialog;
+    if (dialog) {
+      if (typeof dialog.close === "function") dialog.close();
+      dialog.open = false;
+    }
     this._editing = null;
     this._setModalError("");
   }
@@ -424,7 +513,6 @@ class MaintenanceBoardCard extends HTMLElement {
 
     const last_done_date = this._root.getElementById("f_last_done").value.trim();
 
-    // Send ISO datetime at local midnight so backend can align to user's day boundary
     let last_done = null;
     if (last_done_date) {
       const localMidnight = new Date(`${last_done_date}T00:00:00`);
@@ -522,11 +610,15 @@ class MaintenanceBoardCard extends HTMLElement {
 
   _updateLiveDurations(tasks) {
     if (!this._durationEls || this._durationEls.size === 0) return;
-    tasks.forEach(t => {
+    tasks.forEach((t) => {
       const key = this._escape(t.id);
       const el = this._durationEls.get(key);
       if (el) el.textContent = this._fmtDuration(this._liveTotalSec(t));
     });
+  }
+
+  _buildChip(label, extraClass = "") {
+    return `<span class="chip ${extraClass}">${label}</span>`;
   }
 
   _render() {
@@ -557,95 +649,101 @@ class MaintenanceBoardCard extends HTMLElement {
       return;
     }
 
-    const html = tasks.map(t => {
-      const daysLeft = t.days_left;
-      const dueTxt = (daysLeft === null || daysLeft === undefined)
-        ? "no due"
-        : (daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`);
+    const html = (tasks.length === 0)
+      ? `<div class="task-card empty-state">No tasks yet. Click Add Task.</div>`
+      : tasks.map((t) => {
+        const daysLeft = t.days_left;
+        const dueTxt = (daysLeft === null || daysLeft === undefined)
+          ? "No due date"
+          : (daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`);
 
-      const locked = t.locked_by;
-      const status = t.status || "idle";
-      const isLockedByOther = locked && locked !== user;
+        const locked = t.locked_by;
+        const status = t.status || "idle";
+        const isLockedByOther = locked && locked !== user;
 
-      const canStartPause = (!locked || locked === user);
-      const startPauseLabel = (status === "running") ? "Pause" : (status === "paused" ? "Resume" : "Start");
-      const totalSec = this._liveTotalSec(t);
-      const durTxt = this._fmtDuration(totalSec);
-      const lastDone = this._fmtDate(t.last_done) || "never";
-      const lastDoneBy = (t.last_done_by || "").trim();
-      const lastDoneLabel = lastDone === "never"
-        ? "Last done: never"
-        : (lastDoneBy ? `Last done: ${lastDone} by ${lastDoneBy}` : `Last done: ${lastDone}`);
-      const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
+        const canStartPause = (!locked || locked === user);
+        const startPauseLabel = (status === "running") ? "Pause" : (status === "paused" ? "Resume" : "Start");
+        const totalSec = this._liveTotalSec(t);
+        const durTxt = this._fmtDuration(totalSec);
+        const lastDone = this._fmtDate(t.last_done) || "never";
+        const lastDoneBy = (t.last_done_by || "").trim();
+        const lastDoneLabel = lastDone === "never"
+          ? "Last done: never"
+          : (lastDoneBy ? `Last done: ${lastDone} by ${lastDoneBy}` : `Last done: ${lastDone}`);
+        const startedAt = (status === "running" && t.started_at) ? this._fmtDateTimeLocal(t.started_at) : "";
 
-      let borderClass = "ok";
-      if (daysLeft !== null && daysLeft !== undefined) {
-        if (daysLeft <= 0) borderClass = "danger";
-        else if (daysLeft <= 2) borderClass = "warn-pill";
-      }
-      const statusTxt = (status === "idle") ? "idle" : `${status}: ${locked || "unknown"}`;
-      const est = t.est_min ? `${t.est_min}m est` : "";
-      const hasAvg = t.avg_min !== undefined && t.avg_min !== null;
-      const avg = hasAvg ? `${t.avg_min}m avg` : "";
-      const freq = t.freq_days ? `every ${t.freq_days}d` : "";
+        const dueClass = (daysLeft !== null && daysLeft !== undefined && daysLeft < 0) ? "overdue" : "";
+        const statusClass = status === "running" ? "running" : "";
 
-      const note = (t.notes || "").trim();
+        const freq = t.freq_days ? `Every ${t.freq_days}d` : "";
+        const est = t.est_min ? `${t.est_min}m est` : "";
+        const hasAvg = t.avg_min !== undefined && t.avg_min !== null;
+        const avg = hasAvg ? `${t.avg_min}m avg` : "";
+        const note = (t.notes || "").trim();
 
-      const title = this._escape(t.title);
-      const zonePill = t.zone ? `<span class="pill">${this._escape(t.zone)}</span>` : "";
+        const zoneChip = t.zone ? this._buildChip(this._escape(t.zone)) : "";
+        const statusChip = this._buildChip(this._escape(status === "idle" ? "Idle" : status.charAt(0).toUpperCase() + status.slice(1)), statusClass);
+        const dueChip = this._buildChip(this._escape(dueTxt), dueClass);
+        const lockChip = locked ? this._buildChip(`Locked by ${this._escape(locked)}`, "overdue") : "";
+        const lastDoneChip = this._buildChip(this._escape(lastDoneLabel));
+        const freqChip = freq ? this._buildChip(this._escape(freq)) : "";
+        const estChip = est ? this._buildChip(this._escape(est)) : "";
+        const avgChip = avg ? this._buildChip(this._escape(avg)) : "";
 
-      return `
-        <div class="row">
-          <div class="head">
-            <div>
-              <div class="title">${title}</div>
-              <div class="meta">
-                ${zonePill}
-                <span class="pill ${borderClass}">${this._escape(dueTxt)}</span>
-                ${freq ? `<span class="pill">${this._escape(freq)}</span>` : ""}
-                ${est ? `<span class="pill">${this._escape(est)}</span>` : ""}
-                ${avg ? `<span class="pill">${this._escape(avg)}</span>` : ""}
-                <span class="pill">${this._escape(statusTxt)}</span>
-                <span class="pill">${this._escape(lastDoneLabel)}</span>
+        const disableAll = isLockedByOther;
+
+        return `
+          <div class="task-card">
+            <div class="task-header">
+              <div>
+                <div class="task-title">${this._escape(t.title)}</div>
+                <div class="task-meta">
+                  ${zoneChip}
+                  ${statusChip}
+                  ${dueChip}
+                  ${lockChip}
+                  ${lastDoneChip}
+                  ${freqChip}
+                  ${estChip}
+                  ${avgChip}
+                </div>
+                ${note ? `<div class="task-note">${this._escape(note)}</div>` : ""}
               </div>
-              ${note ? `<div class="note">${this._escape(note)}</div>` : ""}
+              <div class="task-actions">
+                <div class="inline-actions">
+                  <ha-icon-button icon="mdi:pencil" aria-label="Edit" data-edit="${this._escape(t.id)}" ${disableAll ? "disabled" : ""}></ha-icon-button>
+                  <ha-icon-button icon="mdi:backup-restore" aria-label="Reset" data-reset="${this._escape(t.id)}" ${disableAll ? "disabled" : ""}></ha-icon-button>
+                  <ha-icon-button icon="mdi:delete" aria-label="Delete" data-del="${this._escape(t.id)}" ${disableAll ? "disabled" : ""}></ha-icon-button>
+                </div>
+              </div>
             </div>
 
-            <div class="right">
-              <div class="duration" data-duration="${this._escape(t.id)}">${this._escape(durTxt)}</div>
-              ${startedAt ? `<div class="small">Started: ${this._escape(startedAt)}</div>` : ""}
-              <div class="icons">
-                <button class="smallBtn" data-edit="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>✏️</button>
-                <button class="smallBtn" data-reset="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>♻️</button>
-                <button class="smallBtn danger" data-del="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>🗑️</button>
+            <div class="task-footer">
+              <div class="duration-block">
+                <div class="duration" data-duration="${this._escape(t.id)}">${this._escape(durTxt)}</div>
+                ${startedAt ? `<div class="meta-text">Started: ${this._escape(startedAt)}</div>` : ""}
+              </div>
+              <div class="task-actions">
+                <mwc-button dense outlined class="primary-btn" data-sp="${this._escape(t.id)}" ${canStartPause ? "" : "disabled"}>${this._escape(startPauseLabel)}</mwc-button>
+                <mwc-button dense raised class="danger-btn" data-c="${this._escape(t.id)}" ${disableAll ? "disabled" : ""}>Complete</mwc-button>
               </div>
             </div>
           </div>
-
-          <div class="btns">
-            <button data-sp="${this._escape(t.id)}" ${canStartPause ? "" : "disabled"}>
-              ${this._escape(startPauseLabel)}
-            </button>
-            <button class="danger" data-c="${this._escape(t.id)}" ${isLockedByOther ? "disabled" : ""}>
-              Complete
-            </button>
-          </div>
-        </div>
-      `;
-    }).join("");
+        `;
+      }).join("");
 
     listEl.innerHTML = html;
     this._renderedKey = stateKey;
 
     this._durationEls = new Map();
-    listEl.querySelectorAll(".duration").forEach(el => {
+    listEl.querySelectorAll(".duration").forEach((el) => {
       const id = el.getAttribute("data-duration");
       if (id) this._durationEls.set(id, el);
     });
 
-    const byId = new Map(tasks.map(t => [t.id, t]));
+    const byId = new Map(tasks.map((t) => [t.id, t]));
 
-    listEl.querySelectorAll("button[data-sp]").forEach(btn => {
+    listEl.querySelectorAll("mwc-button[data-sp]").forEach((btn) => {
       btn.onclick = async () => {
         const id = btn.getAttribute("data-sp");
         const task = byId.get(id);
@@ -653,7 +751,7 @@ class MaintenanceBoardCard extends HTMLElement {
       };
     });
 
-    listEl.querySelectorAll("button[data-c]").forEach(btn => {
+    listEl.querySelectorAll("mwc-button[data-c]").forEach((btn) => {
       btn.onclick = async () => {
         const id = btn.getAttribute("data-c");
         const task = byId.get(id);
@@ -661,7 +759,7 @@ class MaintenanceBoardCard extends HTMLElement {
       };
     });
 
-    listEl.querySelectorAll("button[data-edit]").forEach(btn => {
+    listEl.querySelectorAll("ha-icon-button[data-edit]").forEach((btn) => {
       btn.onclick = () => {
         const id = btn.getAttribute("data-edit");
         const task = byId.get(id);
@@ -669,7 +767,7 @@ class MaintenanceBoardCard extends HTMLElement {
       };
     });
 
-    listEl.querySelectorAll("button[data-reset]").forEach(btn => {
+    listEl.querySelectorAll("ha-icon-button[data-reset]").forEach((btn) => {
       btn.onclick = async () => {
         const id = btn.getAttribute("data-reset");
         const task = byId.get(id);
@@ -677,7 +775,7 @@ class MaintenanceBoardCard extends HTMLElement {
       };
     });
 
-    listEl.querySelectorAll("button[data-del]").forEach(btn => {
+    listEl.querySelectorAll("ha-icon-button[data-del]").forEach((btn) => {
       btn.onclick = async () => {
         const id = btn.getAttribute("data-del");
         const task = byId.get(id);
