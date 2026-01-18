@@ -27,18 +27,43 @@ class MaintenancePanel extends HTMLElement {
       <style>
         :host {
           display: block;
-          height: 100%;
+          height: 100vh;
           background: var(--lovelace-background, var(--primary-background-color));
           color: var(--primary-text-color);
         }
-        .root {
-          min-height: 100vh;
+        ha-app-layout {
           background: var(--lovelace-background, var(--primary-background-color));
+          color: var(--primary-text-color);
+        }
+        app-header {
+          background: var(--app-header-background-color, var(--primary-color));
+          color: var(--app-header-text-color, var(--text-primary-color));
+        }
+        app-toolbar {
+          height: var(--header-height, 56px);
+          display: flex;
+          align-items: center;
+        }
+        .title {
+          font-size: 20px;
+          font-weight: 600;
+          margin-left: 8px;
+        }
+        .content {
+          padding: 16px 24px 32px;
+          box-sizing: border-box;
         }
         .container {
-          padding: 16px;
           max-width: 1100px;
           margin: 0 auto;
+          box-sizing: border-box;
+        }
+        .card-shell {
+          background: var(--card-background-color, var(--ha-card-background, var(--primary-background-color)));
+          border-radius: var(--ha-card-border-radius, 12px);
+          box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.08));
+          border: 1px solid var(--divider-color);
+          padding: 12px 16px 16px;
           box-sizing: border-box;
         }
         .empty-card {
@@ -48,26 +73,51 @@ class MaintenancePanel extends HTMLElement {
           padding: 16px;
           color: var(--primary-text-color);
         }
+        @media (max-width: 640px) {
+          .content {
+            padding: 12px;
+          }
+          .card-shell {
+            padding: 12px;
+          }
+        }
       </style>
-      <div class="root">
-        <div class="container">
-          <maintenance-board style="display:none;"></maintenance-board>
-          <ha-card id="empty-card" class="empty-card" hidden>
-            <div class="empty-content">
-              No Maintenance tasks sensor found. Add the integration first, then reload.
+      <ha-app-layout>
+        <app-header fixed>
+          <app-toolbar>
+            <ha-menu-button id="menuBtn"></ha-menu-button>
+            <div class="title" id="panelTitle">Maintenance</div>
+          </app-toolbar>
+        </app-header>
+        <div class="content">
+          <div class="container">
+            <div class="card-shell">
+              <maintenance-board style="display:none;"></maintenance-board>
+              <ha-card id="empty-card" class="empty-card" hidden>
+                <div class="empty-content">
+                  No Maintenance tasks sensor found. Add the integration first, then reload.
+                </div>
+              </ha-card>
             </div>
-          </ha-card>
+          </div>
         </div>
-      </div>
+      </ha-app-layout>
     `;
 
     this._board = this.shadowRoot.querySelector("maintenance-board");
     this._emptyCard = this.shadowRoot.getElementById("empty-card");
+    this._menuBtn = this.shadowRoot.getElementById("menuBtn");
+    this._titleEl = this.shadowRoot.getElementById("panelTitle");
     this._applyConfig();
   }
 
   _applyConfig() {
     if (!this._board || !this._hass) return;
+    if (this._menuBtn) this._menuBtn.hass = this._hass;
+    if (this._titleEl) {
+      const title = this._panel?.title || this._panel?.config?.title || "Maintenance";
+      this._titleEl.textContent = title;
+    }
 
     const entity = this._resolveTasksEntity();
     if (!entity) {
