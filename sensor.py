@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN
 from .storage import MaintenanceDB, _dt_to_iso, utcnow
@@ -49,6 +50,7 @@ class MaintenanceTasksSensor(SensorEntity):
 
     _attr_has_entity_name = True
     _attr_entity_registry_visible_default = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, hass: HomeAssistant, db: MaintenanceDB, name: str, unique_id: str) -> None:
         self.hass = hass
