@@ -1,6 +1,8 @@
 DOMAIN = "maintenance"
 
-PLATFORMS = ["todo", "select", "button", "sensor"]
+# Only expose the task sensor entity.
+# The dashboard card drives all task actions via services.
+PLATFORMS = ["sensor"]
 
 STORE_VERSION = 1
 STORE_KEY = f"{DOMAIN}_store_v{STORE_VERSION}"
@@ -26,4 +28,3 @@ ATTR_MANUAL_MIN = "manual_minutes"
 STATUS_IDLE = "idle"
 STATUS_RUNNING = "running"
 STATUS_PAUSED = "paused"
-
