@@ -48,6 +48,7 @@ class MaintenanceTasksSensor(SensorEntity):
     """Provides a UI-friendly list of tasks in attributes."""
 
     _attr_has_entity_name = True
+    _attr_entity_registry_visible_default = False
 
     def __init__(self, hass: HomeAssistant, db: MaintenanceDB, name: str, unique_id: str) -> None:
         self.hass = hass
